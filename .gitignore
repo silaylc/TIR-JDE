@@ -1,0 +1,32 @@
+# Veri ve çıktılar (Git'e eklenmez)
+data/*
+!data/splits/
+!data/splits/**
+runs/
+outputs/
+results/
+
+# Model ağırlıkları
+*.pt
+*.pth
+*.onnx
+*.engine
+weights/
+
+# Video
+*.mp4
+*.avi
+*.mov
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Ortam ve IDE
+.env
+.venv/
+.vscode/
+.idea/
+.DS_Store
