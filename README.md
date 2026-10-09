@@ -8,9 +8,6 @@ estimate from the same network both conditions the detection features and
 sets the appearance-versus-motion weight **per detection** during
 association.
 
-Senior project (ISE 494), Atılım University, Information Systems
-Engineering, in cooperative education with TÜBİTAK SAGE.
-
 > **Status: skeleton.** No working code yet. This repository currently fixes
 > the structure, the method provenance and the evaluation protocol.
 
@@ -37,7 +34,7 @@ between the two: it learns the appearance embedding end-to-end and weights it
 by estimated reliability — but with **a single weight per frame**, computed
 from a scene-wide descriptor.
 
-TIR-JDE's claim: appearance reliability is a property of the **detection**,
+**TIR-JDE's claim:** appearance reliability is a property of the **detection**,
 not of the frame. Within the same frame, on the same sensor, at the same
 instant, one UAV can be clearly visible while another blends into the
 background — so a single frame-level score represents neither of them
