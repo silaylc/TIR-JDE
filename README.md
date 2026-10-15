@@ -1,5 +1,9 @@
 # TIR-JDE
 
+<a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
+    <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
+</a>
+
 **Degradation-Adaptive Small Target Detection and Joint Identity Embedding for Multi-Object Tracking in Thermal Infrared UAV Imagery**
 
 Multi-UAV tracking in thermal infrared imagery. A single lightweight network
@@ -168,17 +172,20 @@ not refute the thesis.
 ## Setup
 
 ```bash
-conda env create -f environment.yml
+make create_environment   # conda env create --name tir-jde -f environment.yml
 conda activate tir-jde
-pip install -e .   # makes tir_jde importable; environment.yml stays the primary env spec
+make requirements         # keeps the env in sync with environment.yml (installs tir_jde with -e .)
 ```
+
+Other Makefile targets: `make test`, `make lint`, `make format`, `make clean`,
+`make data`; `make help` lists them all.
 
 PyTorch and Ultralytics will be added at the detector stage.
 
 ## Repository structure
 
-Layout follows the [cookiecutter-data-science](https://cookiecutter-data-science.drivendata.org/)
-convention: all importable code lives under the single `tir_jde/` package,
+Generated from the [cookiecutter-data-science](https://cookiecutter-data-science.drivendata.org/)
+v2 template (conda + `environment.yml`, ruff, pytest, mkdocs): all importable code lives under the single `tir_jde/` package,
 data is split by processing stage, and `reports/`/`models/` hold generated
 artifacts (not committed, see `.gitignore`).
 
@@ -190,7 +197,7 @@ data/
 ├── processed/    final, analysis-ready data
 └── splits/       BSB sequence lists (committed; the data files above are not)
 
-docs/             project documentation
+docs/             mkdocs project (`mkdocs serve` from `docs/`)
 models/           trained, serialized models
 notebooks/        EDA and analysis
 references/       notes on cited papers, data dictionaries
@@ -214,6 +221,7 @@ tir_jde/          the installable package — all code lives here
 baselines/        comparison methods re-run by us (code not copied into Git)
 configs/          experiment configurations
 tests/            unit/smoke tests, mirroring the package layout
-Makefile          requirements / clean / test shortcuts
-pyproject.toml    package metadata and `tir_jde` package discovery
+Makefile          create_environment / requirements / lint / format / test / data
+environment.yml   conda environment (single source of dependencies)
+pyproject.toml    package metadata and ruff configuration
 ```

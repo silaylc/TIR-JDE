@@ -3,16 +3,27 @@ channels:
   - conda-forge
 dependencies:
   - python=3.10
+  - pip
+  - typer
+  - loguru
+  - tqdm
+  - ipython
+  - jupyterlab
+  - matplotlib
+  - notebook
   - numpy
+  - pandas
+  - scikit-learn
+  - ruff
+  - pytest
+  # TIR-JDE'ye özgü bağımlılıklar
   - scipy
   - opencv
-  - pandas
-  - matplotlib
   - pyyaml
-  - tqdm
-  - jupyterlab
-  - pip
   - pip:
-      # TrackEval (HOTA, IDF1, MOTA): değerlendirme aşamasında
-      - git+https://github.com/JonathonLuiten/TrackEval.git
-      # PyTorch ve Ultralytics dedektör aşamasında eklenecek
+    - python-dotenv
+    - mkdocs
+    # TrackEval (HOTA, IDF1, MOTA): değerlendirme aşamasında
+    - git+https://github.com/JonathonLuiten/TrackEval.git
+    # PyTorch ve Ultralytics dedektör aşamasında eklenecek
+    - -e .

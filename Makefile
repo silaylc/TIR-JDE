@@ -1,27 +1,86 @@
-.PHONY: requirements clean test help
+#################################################################################
+# GLOBALS                                                                       #
+#################################################################################
 
-PROJECT_NAME = tir_jde
+PROJECT_NAME = tir-jde
+PYTHON_VERSION = 3.10
 PYTHON_INTERPRETER = python
 
-## Install Python dependencies (pip; environment.yml/conda remains primary)
-requirements:
-	$(PYTHON_INTERPRETER) -m pip install -U pip
-	$(PYTHON_INTERPRETER) -m pip install -e .
+#################################################################################
+# COMMANDS                                                                      #
+#################################################################################
 
-## Delete compiled Python files and caches
+
+## Install Python dependencies
+.PHONY: requirements
+requirements:
+	conda env update --name $(PROJECT_NAME) --file environment.yml --prune
+	
+
+
+
+## Delete all compiled Python files
+.PHONY: clean
 clean:
 	find . -type f -name "*.py[co]" -delete
-	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type d -name "__pycache__" -delete
 
-## Run the test suite
+
+## Lint using ruff (use `make format` to do formatting)
+.PHONY: lint
+lint:
+	ruff format --check
+	ruff check
+
+## Format source code with ruff
+.PHONY: format
+format:
+	ruff check --fix
+	ruff format
+
+
+
+## Run tests
+.PHONY: test
 test:
-	$(PYTHON_INTERPRETER) -m pytest
+	python -m pytest tests
 
-## Show this help
-help:
-	@echo "Available targets:"
-	@echo "  requirements  install the package (pip install -e .)"
-	@echo "  clean         remove compiled Python files and __pycache__"
-	@echo "  test          run pytest"
+
+## Set up Python interpreter environment
+.PHONY: create_environment
+create_environment:
+	conda env create --name $(PROJECT_NAME) -f environment.yml
+	
+	@echo ">>> conda env created. Activate with:\nconda activate $(PROJECT_NAME)"
+	
+
+
+
+#################################################################################
+# PROJECT RULES                                                                 #
+#################################################################################
+
+
+## Make dataset
+.PHONY: data
+data: requirements
+	$(PYTHON_INTERPRETER) tir_jde/dataset.py
+
+
+#################################################################################
+# Self Documenting Commands                                                     #
+#################################################################################
 
 .DEFAULT_GOAL := help
+
+define PRINT_HELP_PYSCRIPT
+import re, sys; \
+lines = '\n'.join([line for line in sys.stdin]); \
+matches = re.findall(r'\n## (.*)\n[\s\S]+?\n([a-zA-Z_-]+):', lines); \
+print('Available rules:\n'); \
+print('\n'.join(['{:25}{}'.format(*reversed(match)) for match in matches]))
+endef
+export PRINT_HELP_PYSCRIPT
+
+help:
+	@$(PYTHON_INTERPRETER) -c "${PRINT_HELP_PYSCRIPT}" < $(MAKEFILE_LIST)

@@ -1,9 +1,0 @@
-# Mirrors environment.yml's pip-installable deps, for `pip install -e .`
-# in contexts without conda. environment.yml remains the primary env spec.
-numpy
-scipy
-opencv-python
-pandas
-matplotlib
-pyyaml
-tqdm
