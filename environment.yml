@@ -1,0 +1,18 @@
+name: tir-jde
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - scipy
+  - opencv
+  - pandas
+  - matplotlib
+  - pyyaml
+  - tqdm
+  - jupyterlab
+  - pip
+  - pip:
+      # TrackEval (HOTA, IDF1, MOTA): değerlendirme aşamasında
+      - git+https://github.com/JonathonLuiten/TrackEval.git
+      # PyTorch ve Ultralytics dedektör aşamasında eklenecek

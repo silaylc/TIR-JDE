@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tir-jde"
+version = "0.1.0"
+description = "Degradation-Adaptive Small Target Detection and Joint Identity Embedding for Multi-Object Tracking in Thermal Infrared UAV Imagery"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+# Dependency source of truth is environment.yml (conda). This lets
+# `pip install -e .` work for local package imports without duplicating
+# the conda env definition.
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tir_jde*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
