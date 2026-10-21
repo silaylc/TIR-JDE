@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pyyaml numpy scipy pandas matplotlib opencv-python-headless \
+          pip install pytest pytest-github-actions-annotate-failures pyyaml numpy scipy pandas matplotlib opencv-python-headless \
             loguru python-dotenv tqdm typer mlflow \
             "git+https://github.com/JonathonLuiten/TrackEval.git"
           pip install -e . --no-deps
