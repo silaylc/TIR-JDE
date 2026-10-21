@@ -1,0 +1,18 @@
+# BSB (Beyond Strong Baseline) — sekans bazlı 102/98 bölünme.
+data:
+  name: bsb
+  # Ham veri: her sekans için bir video (veya kare klasörü) ve MOTChallenge etiketi.
+  raw_root: ${BSB_ROOT:-./data/raw/bsb}
+  videos_dir: TrainVideos         # <raw_root>/<videos_dir>/<seq><video_ext>
+  video_ext: .mp4
+  frames_dir: null                # kareler hazırsa: <raw_root>/<frames_dir>/<seq>/00001.jpg
+  labels_dir: TrainLabels         # <raw_root>/<labels_dir>/<seq>.txt
+  # Sekans listeleri (Git'te, değişmez)
+  splits:
+    train: data/splits/bsb_train.txt
+    val: data/splits/val.txt      # eğitim sekanslarından ayrılan doğrulama grubu
+  image_ext: .jpg
+  reid:
+    # Strong Baseline makalesindeki gibi: her sekansın ilk 1/10'u (1.0 = hepsi)
+    first_fraction: 0.1
+    min_size: 2                   # bu pikselden küçük kırpıntılar atlanır

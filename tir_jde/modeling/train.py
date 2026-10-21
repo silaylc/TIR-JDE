@@ -1,35 +1,16 @@
-"""Detector + degradation + joint-identity training entry point.
+"""Training entry point (cookiecutter convention).
 
-Placeholder: no code yet (see README status, "Lightweight detector" stage).
+Same as ``python -m tir_jde.pipeline train``::
+
+    python -m tir_jde.modeling.train strong_baseline_bsb seed=1
+
+Every compared model is trained through its adapter in
+``tir_jde/modeling/adapters/``; the TIR-JDE model will be added there too.
 """
 
-from pathlib import Path
+import sys
 
-from loguru import logger
-from tqdm import tqdm
-import typer
-
-from tir_jde.config import MODELS_DIR, PROCESSED_DATA_DIR
-
-app = typer.Typer()
-
-
-@app.command()
-def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
-    model_path: Path = MODELS_DIR / "model.pkl",
-    # -----------------------------------------
-):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Training some model...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
-    logger.success("Modeling training complete.")
-    # -----------------------------------------
-
+from tir_jde.pipeline import main
 
 if __name__ == "__main__":
-    app()
+    main(["train", *sys.argv[1:]])

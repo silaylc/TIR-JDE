@@ -1,0 +1,15 @@
+model:
+  name: dist_tracker
+  adapter: dist_tracker
+  repo: https://github.com/silaylc/YOLOv12-Dist-Tracker
+  commit: 52b1729e2426            # yazarın commit'i: 396c359
+  python: ${DIST_PYTHON:-python}  # Dist-Tracker ortamının python'u (Python 3.8, torch 2.4.1)
+  detector:
+    cfg: ./cfg/models/12/yolo12-UAV.yaml
+    epochs: 50                    # yazarın train.py değerleri
+    batch: 16
+    imgsz: 640
+  tracker:
+    cfg: botsort.yaml             # yazarın cfg/trackers/botsort.yaml dosyası
+    imgsz: 1280                   # yazarın track.py değerleri
+    conf: 0.0

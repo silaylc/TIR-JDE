@@ -1,0 +1,2 @@
+defaults: [base, data/bsb, model/strong_baseline]
+name: strong_baseline_bsb

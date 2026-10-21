@@ -1,0 +1,90 @@
+"""Runs inside a baseline's own Python environment (not the pipeline's).
+
+Called as ``<baseline python> _ultralytics_runner.py <job.json>``. The job names
+the folder that contains the baseline's own ``ultralytics`` package
+(``lib_root``); it is put first on ``sys.path`` and the import is checked, so a
+pip-installed ``ultralytics`` can never silently replace the authors' fork.
+
+Modes:
+- ``train``: ``YOLO(model).train(**train_args)``; prints the save directory.
+- ``track``: ``YOLO(weights).track(...)`` on every sequence folder, writes one
+  MOTChallenge file per sequence and the end-to-end frames-per-second.
+
+Only the standard library is imported at module level so the file works on
+the Python versions the baselines pin (3.8+).
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+
+def _import_fork(lib_root: str):
+    lib_root = str(Path(lib_root).resolve())
+    sys.path.insert(0, lib_root)
+    for mod in [m for m in sys.modules if m == "ultralytics" or m.startswith("ultralytics.")]:
+        del sys.modules[mod]
+    import ultralytics  # noqa: E402
+    from ultralytics import YOLO  # noqa: E402
+
+    loaded = str(Path(ultralytics.__file__).resolve())
+    if not loaded.startswith(lib_root):
+        raise RuntimeError(
+            f"Wrong ultralytics package imported: {loaded} (expected the fork under {lib_root}). "
+            "Uninstall the pip package in this environment: pip uninstall -y ultralytics"
+        )
+    print(f"[runner] ultralytics from {loaded}", flush=True)
+    return YOLO
+
+
+def _train(job: dict) -> dict:
+    YOLO = _import_fork(job["lib_root"])
+    model = YOLO(job["model"])
+    model.train(**job["train_args"])
+    save_dir = Path(model.trainer.save_dir)
+    return {"save_dir": str(save_dir), "best": str(save_dir / "weights" / "best.pt")}
+
+
+def _track(job: dict) -> dict:
+    YOLO = _import_fork(job["lib_root"])
+    out_dir = Path(job["out_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    n_frames, seconds = 0, 0.0
+    for seq_dir in sorted(Path(job["frames_root"]).iterdir()):
+        if not seq_dir.is_dir():
+            continue
+        model = YOLO(job["weights"])  # fresh tracker state per sequence
+        rows = []
+        t0 = time.perf_counter()
+        for frame_idx, result in enumerate(
+            model.track(source=str(seq_dir), stream=True, verbose=False, **job["track_args"]), start=1
+        ):
+            boxes = result.boxes
+            if boxes is None or boxes.id is None:
+                continue
+            xyxy = boxes.xyxy.cpu().numpy()
+            ids = boxes.id.cpu().numpy().astype(int)
+            conf = boxes.conf.cpu().numpy()
+            for (x1, y1, x2, y2), tid, s in zip(xyxy, ids, conf):
+                rows.append(
+                    f"{frame_idx},{tid},{x1:.2f},{y1:.2f},{x2 - x1:.2f},{y2 - y1:.2f},{s:.4f},-1,-1,-1"
+                )
+        seconds += time.perf_counter() - t0
+        n_frames += len(list(seq_dir.glob("*.*")))
+        (out_dir / f"{seq_dir.name}.txt").write_text("\n".join(rows) + ("\n" if rows else ""))
+        print(f"[runner] {seq_dir.name}: {len(rows)} boxes", flush=True)
+    return {"pred_dir": str(out_dir), "frames": n_frames, "seconds": seconds,
+            "fps": n_frames / seconds if seconds else 0.0}
+
+
+def main() -> None:
+    job = json.loads(Path(sys.argv[1]).read_text())
+    os.chdir(job.get("cwd", os.getcwd()))
+    result = {"train": _train, "track": _track}[job["mode"]](job)
+    Path(job["result_file"]).write_text(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,35 +1,15 @@
-"""Inference entry point: detector forward pass feeding the tracker.
+"""Inference + evaluation entry point (cookiecutter convention).
 
-Placeholder: no code yet (see README status).
+Same as ``python -m tir_jde.pipeline evaluate``: runs the trained model on the
+validation sequences, writes MOTChallenge files and scores them with the
+shared TrackEval evaluator::
+
+    python -m tir_jde.modeling.predict strong_baseline_bsb seed=1
 """
 
-from pathlib import Path
+import sys
 
-from loguru import logger
-from tqdm import tqdm
-import typer
-
-from tir_jde.config import MODELS_DIR, PROCESSED_DATA_DIR
-
-app = typer.Typer()
-
-
-@app.command()
-def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    features_path: Path = PROCESSED_DATA_DIR / "test_features.csv",
-    model_path: Path = MODELS_DIR / "model.pkl",
-    predictions_path: Path = PROCESSED_DATA_DIR / "test_predictions.csv",
-    # -----------------------------------------
-):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Performing inference for model...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
-    logger.success("Inference complete.")
-    # -----------------------------------------
-
+from tir_jde.pipeline import main
 
 if __name__ == "__main__":
-    app()
+    main(["evaluate", *sys.argv[1:]])

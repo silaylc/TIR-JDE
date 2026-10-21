@@ -12,8 +12,10 @@ estimate from the same network both conditions the detection features and
 sets the appearance-versus-motion weight **per detection** during
 association.
 
-> **Status: skeleton.** No working code yet. This repository currently fixes
-> the structure, the method provenance and the evaluation protocol.
+> **Status:** the experiment pipeline (preprocess → train → evaluate →
+> visualize, logged to MLflow/DagsHub) is in place and runs both baselines on
+> BSB; the TIR-JDE model itself is not implemented yet. See
+> [Experiment pipeline](#experiment-pipeline).
 
 ---
 
@@ -169,6 +171,28 @@ Every result is additionally reported:
 degradation is low" is itself a valid result. Refuting the hypothesis does
 not refute the thesis.
 
+## Experiment pipeline
+
+Every compared model is trained and tested on the same BSB split, with the
+same validation group and the same TrackEval code. Each run's dataset, model
+type, parameters, training curves, test metrics and outputs go to one MLflow
+run (DagsHub when `DAGSHUB_USER`/`DAGSHUB_TOKEN` are set, local `mlruns/`
+otherwise).
+
+```bash
+python -m tir_jde.pipeline make-val   strong_baseline_bsb --per-family 1   # once -> data/splits/val.txt
+python -m tir_jde.pipeline preprocess strong_baseline_bsb
+python -m tir_jde.pipeline run        dist_tracker_bsb seed=0               # train + evaluate + visualize
+python -m tir_jde.pipeline compare    strong_baseline_bsb dist_tracker_bsb --seeds 0 1 2
+```
+
+- Configs: `configs/experiment/*.yaml` compose `base` + `data/*` + `model/*`;
+  any key can be overridden on the command line (`model.detector.epochs=1`).
+- Baselines run unmodified, from their own repositories pinned to a commit,
+  in their own Python environments (`tir_jde/modeling/adapters/`).
+- Colab (A100): [`notebooks/colab_pipeline.ipynb`](notebooks/colab_pipeline.ipynb).
+- Full description (Turkish): [`docs/pipeline.md`](docs/pipeline.md).
+
 ## Setup
 
 ```bash
@@ -180,7 +204,9 @@ make requirements         # keeps the env in sync with environment.yml (installs
 Other Makefile targets: `make test`, `make lint`, `make format`, `make clean`,
 `make data`; `make help` lists them all.
 
-PyTorch and Ultralytics will be added at the detector stage.
+PyTorch and Ultralytics are not part of this environment: each baseline runs
+in its own environment (see the Colab notebook); TIR-JDE's own detector will
+add them.
 
 ## Repository structure
 
@@ -206,20 +232,24 @@ reports/
 
 tir_jde/          the installable package — all code lives here
 ├── config.py           project paths
-├── dataset.py          dataset / label loading
+├── experiment.py       config composition, overrides, run naming
+├── tracking.py         MLflow / DagsHub logging
+├── pipeline.py         CLI: make-val, preprocess, train, evaluate, visualize, run, compare
+├── dataset.py          BSB → YOLO / ReID / tracking inputs, split handling
 ├── features.py         shared feature/label prep
 ├── plots.py             plotting helpers
 ├── modeling/
 │   ├── train.py         training entry point
-│   └── predict.py        inference entry point
+│   ├── predict.py        inference entry point
+│   └── adapters/         one adapter per compared model (Strong Baseline, Dist-Tracker)
 ├── detector/            detector, appearance head, losses
 ├── degradation/         degradation estimation and the FiLM module
 ├── trackers/            tracking framework and association
 ├── eval/                TrackEval wrapper, ablations, stratified reporting
 └── tools/               data preparation, format conversion, visualization
 
-baselines/        comparison methods re-run by us (code not copied into Git)
-configs/          experiment configurations
+baselines/        notes on the comparison methods (their code is not copied into Git)
+configs/          base / data / model / experiment configurations
 tests/            unit/smoke tests, mirroring the package layout
 Makefile          create_environment / requirements / lint / format / test / data
 environment.yml   conda environment (single source of dependencies)

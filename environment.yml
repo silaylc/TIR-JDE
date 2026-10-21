@@ -22,8 +22,9 @@ dependencies:
   - pyyaml
   - pip:
     - python-dotenv
+    - mlflow                # deney kayıtları (yerel veya DagsHub)
     - mkdocs
     # TrackEval (HOTA, IDF1, MOTA): değerlendirme aşamasında
     - git+https://github.com/JonathonLuiten/TrackEval.git
-    # PyTorch ve Ultralytics dedektör aşamasında eklenecek
+    # Baseline'lar kendi ortamlarında çalışır (bkz. notebooks/colab_pipeline.ipynb)
     - -e .

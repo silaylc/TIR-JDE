@@ -226,3 +226,8 @@ weights/
 # IDE
 .vscode/
 .idea/
+
+# Pipeline çıktıları (Colab'da Drive'a yazılır)
+/work/
+mlruns/
+reports/comparison/

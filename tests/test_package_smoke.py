@@ -27,6 +27,11 @@ PACKAGES = [
     "tir_jde.eval",
     "tir_jde.eval.ablations",
     "tir_jde.tools",
+    "tir_jde.experiment",
+    "tir_jde.tracking",
+    "tir_jde.pipeline",
+    "tir_jde.eval.trackeval_runner",
+    "tir_jde.modeling.adapters",
 ]
 
 

@@ -1,0 +1,22 @@
+# Ayarlar her deneyde ortak. Deney dosyaları bunları ezebilir.
+seed: 0
+
+paths:
+  # Çalıştırma klasörü: ağırlıklar, takip çıktıları, grafikler.
+  # Colab'da Drive'a yönlendirin, örn. TIRJDE_WORK=/content/drive/MyDrive/tir-jde-work
+  work_dir: ${TIRJDE_WORK:-./work}
+  # Baseline depolarının ve Python ortamlarının bulunduğu yer
+  baselines_dir: ${TIRJDE_BASELINES:-./work/baselines}
+
+tracking:
+  # MLflow deney adı. Uzak sunucu MLFLOW_TRACKING_URI ortam değişkeniyle verilir;
+  # verilmezse <work_dir>/mlruns altında yerel kayıt tutulur.
+  experiment: tir-jde-baselines
+  # DagsHub: DAGSHUB_USER ve DAGSHUB_TOKEN ortam değişkenleri tanımlıysa kayıtlar
+  # https://dagshub.com/<owner>/<repo>.mlflow adresine gider.
+  dagshub:
+    owner: silaylc
+    repo: TIR-JDE
+
+eval:
+  metrics: [HOTA, CLEAR, Identity]

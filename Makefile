@@ -61,10 +61,20 @@ create_environment:
 #################################################################################
 
 
-## Make dataset
+## Convert BSB into every model's format (EXP=experiment name)
 .PHONY: data
-data: requirements
-	$(PYTHON_INTERPRETER) tir_jde/dataset.py
+data:
+	$(PYTHON_INTERPRETER) -m tir_jde.pipeline preprocess $(or $(EXP),strong_baseline_bsb)
+
+## Train, evaluate and visualize one experiment (EXP=..., ARGS="seed=1 ...")
+.PHONY: run
+run:
+	$(PYTHON_INTERPRETER) -m tir_jde.pipeline run $(EXP) $(ARGS)
+
+## Compare experiments over seeds (EXPS="a b", SEEDS="0 1 2")
+.PHONY: compare
+compare:
+	$(PYTHON_INTERPRETER) -m tir_jde.pipeline compare $(EXPS) --seeds $(or $(SEEDS),0)
 
 
 #################################################################################
