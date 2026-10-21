@@ -6,7 +6,8 @@ Raw input (per sequence ``seq``):
 - labels: ``<raw_root>/<labels_dir>/<seq>.txt`` in MOTChallenge format
   ``frame, id, x_left, y_top, w, h, conf, class, visibility`` (frames start at 1).
 
-Outputs under ``<work_dir>/data/<dataset>-<split_hash>/``:
+Outputs under ``<data_dir>/<dataset>-<split_hash>/`` (``data_dir`` defaults to
+``<work_dir>/data``):
 
 - ``frames/<seq>/00001.jpg``                    extracted frames (shared cache)
 - ``yolo/{train,val}/{images,labels}/``         detector training data; file names
@@ -275,8 +276,9 @@ def prepare(cfg: dict, parts: tuple[str, ...] = ("yolo", "reid", "track")) -> di
     data_cfg = cfg["data"]
     splits = resolve_splits(data_cfg)
     h = split_hash(splits, data_cfg)
-    root = Path(cfg["paths"]["work_dir"]) / "data" / f"{data_cfg['name']}-{h}"
-    frames_dir = Path(cfg["paths"]["work_dir"]) / "data" / f"{data_cfg['name']}-frames"
+    data_dir = Path(cfg["paths"].get("data_dir") or Path(cfg["paths"]["work_dir"]) / "data")
+    root = data_dir / f"{data_cfg['name']}-{h}"
+    frames_dir = data_dir / f"{data_cfg['name']}-frames"
     manifest_path = root / "manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {
         "dataset": data_cfg["name"], "split_hash": h, "root": str(root),

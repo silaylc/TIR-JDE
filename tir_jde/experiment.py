@@ -108,7 +108,7 @@ def load_config(experiment: str | Path, overrides: Iterable[str] = ()) -> dict:
         set_by_path(cfg, key, value)
 
     cfg = _expand_env(cfg)
-    cfg["paths"] = {k: str(_abs(v)) for k, v in cfg.get("paths", {}).items()}
+    cfg["paths"] = {k: str(_abs(v)) for k, v in cfg.get("paths", {}).items() if v not in (None, "")}
     return cfg
 
 

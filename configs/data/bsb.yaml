@@ -2,11 +2,12 @@
 data:
   name: bsb
   # Ham veri: her sekans için bir video (veya kare klasörü) ve MOTChallenge etiketi.
+  # Kaynak: Zenodo 15853476, Train.zip (3.8 GB) -> TrainImages/, TrainLabels/, TrainVideos/
   raw_root: ${BSB_ROOT:-./data/raw/bsb}
-  videos_dir: TrainVideos         # <raw_root>/<videos_dir>/<seq><video_ext>
+  frames_dir: TrainImages         # hazır kareler: <raw_root>/TrainImages/<seq>/00000.jpg ... (sıralı)
+  videos_dir: TrainVideos         # frames_dir: null verilirse kareler videodan çıkarılır
   video_ext: .mp4
-  frames_dir: null                # kareler hazırsa: <raw_root>/<frames_dir>/<seq>/00001.jpg
-  labels_dir: TrainLabels         # <raw_root>/<labels_dir>/<seq>.txt
+  labels_dir: TrainLabels         # <raw_root>/<labels_dir>/<seq>.txt (kare numarası 1'den başlar)
   # Sekans listeleri (Git'te, değişmez)
   splits:
     train: data/splits/bsb_train.txt

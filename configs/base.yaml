@@ -5,6 +5,9 @@ paths:
   # Çalıştırma klasörü: ağırlıklar, takip çıktıları, grafikler.
   # Colab'da Drive'a yönlendirin, örn. TIRJDE_WORK=/content/drive/MyDrive/tir-jde-work
   work_dir: ${TIRJDE_WORK:-./work}
+  # Preprocess çıktıları (on binlerce küçük dosya). Boşsa <work_dir>/data kullanılır.
+  # Colab'da Drive yerine yerel diske verin: TIRJDE_DATA=/content/work-data
+  data_dir: ${TIRJDE_DATA:-}
   # Baseline depolarının ve Python ortamlarının bulunduğu yer
   baselines_dir: ${TIRJDE_BASELINES:-./work/baselines}
 
