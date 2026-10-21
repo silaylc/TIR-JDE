@@ -231,3 +231,5 @@ weights/
 /work/
 mlruns/
 reports/comparison/
+mlflow.db
+mlartifacts/

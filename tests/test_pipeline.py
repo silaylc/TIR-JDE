@@ -15,7 +15,7 @@ pytest.importorskip("trackeval")
 
 import mlflow  # noqa: E402
 
-from tir_jde import pipeline  # noqa: E402
+from tir_jde import pipeline, tracking  # noqa: E402
 from tir_jde.modeling import adapters  # noqa: E402
 from tir_jde.modeling.adapters.base import Adapter  # noqa: E402
 
@@ -58,8 +58,7 @@ def test_train_evaluate_visualize_share_one_mlflow_run(oracle_cfg):
     assert result["overall"]["HOTA"] == pytest.approx(1.0)
     assert all(Path(f).exists() for f in figures)
 
-    store = Path(oracle_cfg["paths"]["work_dir"]) / "mlruns"
-    mlflow.set_tracking_uri(store.resolve().as_uri())
+    mlflow.set_tracking_uri(tracking.tracking_uri(oracle_cfg))
     runs = mlflow.search_runs(experiment_names=[oracle_cfg["tracking"]["experiment"]])
     assert len(runs) == 1
     run = runs.iloc[0]

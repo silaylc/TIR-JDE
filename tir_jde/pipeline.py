@@ -135,7 +135,11 @@ def stage_compare(experiments: list[str], seeds: list[int], overrides: list[str]
                 values[m].append(r["overall"].get(m, np.nan))
             values["FPS"].append(r.get("fps", np.nan))
         name = load_config(exp, overrides)["name"]
-        table[name] = {m: (float(np.nanmean(v)), float(np.nanstd(v))) for m, v in values.items() if v}
+        table[name] = {}
+        for m, v in values.items():
+            finite = [x for x in v if x is not None and np.isfinite(x)]
+            if finite:
+                table[name][m] = (float(np.mean(finite)), float(np.std(finite)))
         rows.append({"experiment": name, "seeds": len(values["HOTA"]),
                      **{m: f"{table[name][m][0]:.4f} ± {table[name][m][1]:.4f}" for m in table[name]}})
     out_dir.mkdir(parents=True, exist_ok=True)

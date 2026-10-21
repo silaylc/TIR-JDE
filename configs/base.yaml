@@ -10,7 +10,7 @@ paths:
 
 tracking:
   # MLflow deney adı. Uzak sunucu MLFLOW_TRACKING_URI ortam değişkeniyle verilir;
-  # verilmezse <work_dir>/mlruns altında yerel kayıt tutulur.
+  # verilmezse <work_dir>/mlflow.db (SQLite) altında yerel kayıt tutulur.
   experiment: tir-jde-baselines
   # DagsHub: DAGSHUB_USER ve DAGSHUB_TOKEN ortam değişkenleri tanımlıysa kayıtlar
   # https://dagshub.com/<owner>/<repo>.mlflow adresine gider.

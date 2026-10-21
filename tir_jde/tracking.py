@@ -10,7 +10,9 @@ Tracking server, in order of precedence:
    credentials variables);
 2. DagsHub, when ``DAGSHUB_USER`` and ``DAGSHUB_TOKEN`` are set — the run goes
    to ``https://dagshub.com/<owner>/<repo>.mlflow`` from ``tracking.dagshub``;
-3. a local file store at ``<work_dir>/mlruns``.
+3. a local SQLite store at ``<work_dir>/mlflow.db`` with artifacts in
+   ``<work_dir>/mlartifacts`` (MLflow no longer accepts new file stores).
+   View it with ``mlflow ui --backend-store-uri sqlite:///<work_dir>/mlflow.db``.
 """
 
 from __future__ import annotations
@@ -37,7 +39,17 @@ def tracking_uri(cfg: dict) -> str:
         os.environ.setdefault("MLFLOW_TRACKING_PASSWORD", os.environ["DAGSHUB_TOKEN"])
         owner = dagshub.get("owner") or os.environ["DAGSHUB_USER"]
         return f"https://dagshub.com/{owner}/{dagshub['repo']}.mlflow"
-    return (Path(cfg["paths"]["work_dir"]) / "mlruns").resolve().as_uri()
+    db = (Path(cfg["paths"]["work_dir"]) / "mlflow.db").resolve()
+    db.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{db}"
+
+
+def _set_experiment(mlflow, cfg: dict, uri: str) -> None:
+    name = cfg.get("tracking", {}).get("experiment", "tir-jde")
+    if uri.startswith("sqlite:") and mlflow.get_experiment_by_name(name) is None:
+        artifacts = (Path(cfg["paths"]["work_dir"]) / "mlartifacts").resolve()
+        mlflow.create_experiment(name, artifact_location=artifacts.as_uri())
+    mlflow.set_experiment(name)
 
 
 def git_commit(path: Path) -> str:
@@ -63,8 +75,9 @@ def mlflow_run(cfg: dict, stage: str) -> Iterator["object"]:
     """Opens (or re-opens) the MLflow run of this experiment configuration."""
     import mlflow
 
-    mlflow.set_tracking_uri(tracking_uri(cfg))
-    mlflow.set_experiment(cfg.get("tracking", {}).get("experiment", "tir-jde"))
+    uri = tracking_uri(cfg)
+    mlflow.set_tracking_uri(uri)
+    _set_experiment(mlflow, cfg, uri)
 
     rdir = run_dir(cfg)
     id_file = rdir / "mlflow_run_id.txt"
@@ -84,9 +97,7 @@ def mlflow_run(cfg: dict, stage: str) -> Iterator["object"]:
                 f"Run {run_name(cfg)} was created with a different configuration "
                 f"({stored} != {current}). Use a new seed or tag=... for changed settings."
             )
-        mlflow.set_tags(
-            {"config.hash": current}
-        )
+        mlflow.set_tags({"config.hash": current})
         mlflow.set_tags(
             {
                 "stage.last": stage,

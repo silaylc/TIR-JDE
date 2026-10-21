@@ -72,7 +72,8 @@ koduyla puanlanır: HOTA, DetA, AssA, LocA, IDF1, IDP, IDR, MOTA, MOTP, IDSW, FP
 | Dosyalar | `config/config.yaml`, ortamların `pip freeze` çıktıları, eğitim logları, `best.pt`, tahminler, grafikler, videolar |
 
 Kayıt yeri: `MLFLOW_TRACKING_URI` → yoksa `DAGSHUB_USER` + `DAGSHUB_TOKEN` ile
-`https://dagshub.com/silaylc/TIR-JDE.mlflow` → yoksa `<work_dir>/mlruns` (yerel).
+`https://dagshub.com/silaylc/TIR-JDE.mlflow` → yoksa `<work_dir>/mlflow.db` (yerel SQLite;
+`mlflow ui --backend-store-uri sqlite:///<work_dir>/mlflow.db` ile açılır).
 
 Bir deney + seed (+ `tag`) **tek bir MLflow run'ıdır**; train, evaluate ve visualize aynı run'a yazar.
 Aynı run adıyla farklı ayarlar (ör. başka epoch sayısı) çalıştırılırsa pipeline durur; yeni ayar için
