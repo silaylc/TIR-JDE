@@ -50,5 +50,7 @@ def synthetic_cfg(tmp_path: Path) -> dict:
             f"data.splits.train={splits / 'train.txt'}",
             f"data.splits.val={splits / 'val.txt'}",
             "data.reid.first_fraction=1.0",
+            "data.exclude=[]",            # BSB'nin hariç listesi sentetik veriye uygulanmaz
+            "data.scene_groups=null",
         ],
     )
