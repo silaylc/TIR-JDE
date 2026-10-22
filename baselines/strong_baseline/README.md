@@ -11,3 +11,14 @@ YOLOv12 + BoT-SORT + FastReID (SBS-S50). Kod: [silaylc/Yolov12_BoT-SORT_Re-ID](h
 ```bash
 python -m tir_jde.pipeline run strong_baseline_bsb seed=0
 ```
+
+## Yazarın kodundan farklar (kopyadaki commit'ler)
+
+| Commit | Değişiklik | Neden |
+|---|---|---|
+| `f74b91d` | `assets/existing_methods_overview.png` geri eklendi | Yazarın AMP kontrolü (`ultralytics/utils/checks.py`) bu resmi kullanıyor; kopyada eksikti |
+| `4ecdd24` | `fast_reid/fastreid/engine/train_loop.py`: `zero_grad()` → `zero_grad(set_to_none=False)` | FastReID'in `ContiguousParams` optimizasyonu gradyan tamponunun silinmemesini gerektiriyor; PyTorch ≥ 2.0'da varsayılan `set_to_none=True` olduğu için ReID eğitimi ilk adımda duruyordu. PyTorch 1.x davranışının aynısıdır; eğitim değişmez. |
+
+ReID, yazarın config'indeki gibi ImageNet ön-eğitimli backbone'dan başlar (`MODEL.WEIGHTS: ''`); yazarın
+`train_net.py`'sinin indirdiği eğitilmiş `model_0016.pth` eğitimde kullanılmaz.
+
