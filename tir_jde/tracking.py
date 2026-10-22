@@ -35,8 +35,9 @@ def tracking_uri(cfg: dict) -> str:
         return os.environ["MLFLOW_TRACKING_URI"]
     dagshub = cfg.get("tracking", {}).get("dagshub") or {}
     if os.environ.get("DAGSHUB_USER") and os.environ.get("DAGSHUB_TOKEN") and dagshub.get("repo"):
-        os.environ.setdefault("MLFLOW_TRACKING_USERNAME", os.environ["DAGSHUB_USER"])
-        os.environ.setdefault("MLFLOW_TRACKING_PASSWORD", os.environ["DAGSHUB_TOKEN"])
+        # Always take the DagsHub credentials, even if older MLFLOW_* values are set.
+        os.environ["MLFLOW_TRACKING_USERNAME"] = os.environ["DAGSHUB_USER"]
+        os.environ["MLFLOW_TRACKING_PASSWORD"] = os.environ["DAGSHUB_TOKEN"]
         owner = dagshub.get("owner") or os.environ["DAGSHUB_USER"]
         return f"https://dagshub.com/{owner}/{dagshub['repo']}.mlflow"
     db = (Path(cfg["paths"]["work_dir"]) / "mlflow.db").resolve()
