@@ -48,7 +48,8 @@ def test_dist_tracker_uses_the_fork_and_author_settings(tmp_path):
     assert train["model"] == "./cfg/models/12/yolo12-UAV.yaml"
     assert (train["train_args"]["epochs"], train["train_args"]["imgsz"]) == (50, 640)
     track = adapter.track_job({"detector": "best.pt"})
-    assert track["track_args"] == {"tracker": "botsort.yaml", "imgsz": 1280, "conf": 0.0, "device": "0"}
+    assert track["track_args"] == {"tracker": "botsort.yaml", "imgsz": 1280, "conf": 0.0, "device": "0",
+                                   "save": False, "save_frames": False, "save_txt": False, "show": False}
 
 
 FAKE_ULTRALYTICS = textwrap.dedent(

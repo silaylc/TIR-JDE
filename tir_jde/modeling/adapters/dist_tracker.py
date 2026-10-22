@@ -59,6 +59,10 @@ class DistTrackerAdapter(Adapter):
                 "imgsz": trk["imgsz"],
                 "conf": trk["conf"],
                 "device": "0",
+                # output only: the fork's defaults write every annotated frame to disk, which
+                # would be counted in the measured FPS. Boxes and IDs are unaffected; the
+                # runner writes the MOTChallenge files itself (Strong Baseline runs --nosave).
+                "save": False, "save_frames": False, "save_txt": False, "show": False,
             },
         }
 
