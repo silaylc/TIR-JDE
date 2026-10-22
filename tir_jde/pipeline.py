@@ -86,6 +86,8 @@ def stage_evaluate(cfg: dict) -> dict:
         (adapter.run_dir / "results.json").write_text(json.dumps(result, indent=2))
         _write_per_sequence_csv(result["per_sequence"], adapter.run_dir / "per_sequence.csv")
         mlflow.log_artifact(str(adapter.run_dir / "per_sequence.csv"), artifact_path="eval")
+        for log in adapter.logs_dir.glob("track*.log"):
+            mlflow.log_artifact(str(log), artifact_path="logs")
     print(json.dumps(result["overall"], indent=2), f"\nFPS (end-to-end): {tracked['fps']:.1f}")
     return result
 
