@@ -81,10 +81,12 @@ class StrongBaselineAdapter(Adapter):
         reid = self.model_cfg.get("reid", {})
         if reid.get("enabled", True) and not reid.get("weights"):
             out = self.run_dir / "reid"
+            opts = ["MODEL.DEVICE", "cuda:0", "OUTPUT_DIR", str(out),
+                    "DATASETS.NAMES", '("MOT20",)', "DATASETS.TESTS", '("MOT20",)']
+            if reid.get("max_epoch"):
+                opts += ["SOLVER.MAX_EPOCH", str(int(reid["max_epoch"]))]
             self._run(
-                [self.python, "fast_reid/tools/train_net.py", "--config-file", str(self.reid_config()),
-                 "MODEL.DEVICE", "cuda:0", "OUTPUT_DIR", str(out),
-                 "DATASETS.NAMES", '("MOT20",)', "DATASETS.TESTS", '("MOT20",)'],
+                [self.python, "fast_reid/tools/train_net.py", "--config-file", str(self.reid_config()), *opts],
                 "train_reid", cwd=self.botsort_dir,
                 env={"FASTREID_DATASETS": str(self.data_root / "reid")},
             )

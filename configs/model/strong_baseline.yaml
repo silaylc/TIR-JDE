@@ -15,6 +15,7 @@ model:
     enabled: true
     config: logs/sbs_S50/config.yaml
     weights: null                 # null = bu çalıştırmada eğitilen ReID kullanılır
+    max_epoch: null               # null = yazarın config'indeki epoch sayısı; duman testinde 1
   tracker:
     img_size: 1600
     track_buffer: 60
