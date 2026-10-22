@@ -96,3 +96,24 @@ def test_proportional_validation_split_follows_family_sizes():
     count = {f: sum(dataset.family_of(s) == f for s in val) for f in ("T", "C", "L", "Takeoff")}
     assert count == {"T": 3, "C": 1, "L": 1, "Takeoff": 0}
     assert val == dataset.make_val_split(train, families, per_family=1, seed=0, fraction=0.15)
+
+
+def test_scene_groups_are_never_split_and_excluded_sequences_drop_out(tmp_path):
+    train = [f"T_{i:02d}" for i in range(20)] + ["C_00", "C_01", "C_02"]
+    families = {s: dataset.family_of(s) for s in train}
+    groups = {"T_00": "g1", "T_01": "g1", "T_02": "g1", "T_03": "g2", "T_04": "g2"}
+    for seed in range(10):
+        val = dataset.make_val_split(train, families, 1, seed, fraction=0.15, groups=groups)
+        for g in ("g1", "g2"):
+            members = {s for s, x in groups.items() if x == g}
+            assert members <= set(val) or not (members & set(val))  # whole group or nothing
+        assert any(dataset.family_of(s) == "C" for s in val) and any(dataset.family_of(s) == "C" for s in set(train) - set(val))
+
+    (tmp_path / "train.txt").write_text("\n".join(train) + "\n")
+    (tmp_path / "val.txt").write_text("T_05\n")
+    cfg = {"splits": {"train": str(tmp_path / "train.txt"), "val": str(tmp_path / "val.txt")}, "exclude": ["T_06"]}
+    splits = dataset.resolve_splits(cfg)
+    assert "T_06" not in splits["train"] and splits["val"] == ["T_05"]
+    cfg["exclude"] = ["T_05"]
+    with pytest.raises(ValueError, match="Excluded"):
+        dataset.resolve_splits(cfg)

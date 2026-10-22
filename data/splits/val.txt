@@ -1,17 +1,17 @@
-# validation group: 0.15 of each family (min 1), seed 0
-BB1_01
-BB2P_01
-BB2_04
+# validation group: 0.15 of each family (min 1), scene groups kept whole, excluded: BB2P_01 T_13, seed 0
+BB1_00
+BB2P_02
+BB2_03
 B_05
-CF_07
-C_00
-C_01
-C_05
-L_05
+CF_04
+C_04
+C_09
+C_18
+L_01
 Landing_01
-TF_05
-T_15
-T_18
-T_21
+TF_06
+T_00
+T_08
+T_09
+T_20
 T_24
-T_31

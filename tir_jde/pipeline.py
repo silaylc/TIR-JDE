@@ -161,11 +161,17 @@ def stage_make_val(cfg: dict, per_family: int, seed: int, force: bool,
     out = resolve_path(data_cfg["splits"]["val"])
     if out.exists() and not force:
         raise FileExistsError(f"{out} exists; split lists are fixed once created (use --force to overwrite).")
-    train = dataset.read_split(data_cfg["splits"]["train"])
+    excluded = set(data_cfg.get("exclude") or [])
+    train = [s for s in dataset.read_split(data_cfg["splits"]["train"]) if s not in excluded]
     families = {s: f for s in train if (f := dataset.family_of(s))}
-    val = dataset.make_val_split(train, families, per_family, seed, fraction)
+    groups = dataset.read_scene_groups(data_cfg.get("scene_groups"))
+    val = dataset.make_val_split(train, families, per_family, seed, fraction, groups)
     out.parent.mkdir(parents=True, exist_ok=True)
     rule = f"{fraction:g} of each family (min 1)" if fraction is not None else f"{per_family} per family"
+    if groups:
+        rule += ", scene groups kept whole"
+    if excluded:
+        rule += f", excluded: {' '.join(sorted(excluded))}"
     out.write_text(f"# validation group: {rule}, seed {seed}\n" + "\n".join(val) + "\n")
     print(f"{len(val)} validation sequences -> {out}")
     return out

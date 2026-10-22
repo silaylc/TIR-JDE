@@ -81,14 +81,27 @@ def read_split(path: str | Path) -> list[str]:
 
 
 def resolve_splits(data_cfg: dict) -> dict[str, list[str]]:
-    """Train = BSB train minus the validation group; val = the validation group."""
+    """Train = BSB train minus the validation group and the excluded sequences."""
     train_all = read_split(data_cfg["splits"]["train"])
     val = read_split(data_cfg["splits"]["val"])
+    excluded = set(data_cfg.get("exclude") or [])
     unknown = sorted(set(val) - set(train_all))
     if unknown:
         raise ValueError(f"Validation sequences not in the training list: {unknown}")
-    train = [s for s in train_all if s not in set(val)]
+    if excluded & set(val):
+        raise ValueError(f"Excluded sequences in the validation group: {sorted(excluded & set(val))}")
+    train = [s for s in train_all if s not in set(val) and s not in excluded]
     return {"train": train, "val": val}
+
+
+def read_scene_groups(path: str | Path | None) -> dict[str, str]:
+    """Sequence -> scene group from a CSV with ``bsb`` and ``scene_group`` columns."""
+    if not path:
+        return {}
+    import csv
+    p = resolve_path(path)
+    rows = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln and not ln.startswith("#")]
+    return {r["bsb"]: str(r["scene_group"]) for r in csv.DictReader(rows)}
 
 
 def split_hash(splits: dict[str, list[str]], data_cfg: dict) -> str:
@@ -110,7 +123,7 @@ def family_of(seq: str) -> str | None:
 
 def make_val_split(
     train: list[str], families: dict[str, str], per_family: int, seed: int,
-    fraction: float | None = None,
+    fraction: float | None = None, groups: dict[str, str] | None = None,
 ) -> list[str]:
     """Picks validation sequences from every family (scene type).
 
@@ -121,6 +134,8 @@ def make_val_split(
 
     Every family always keeps at least one sequence for training. ``families``
     maps sequence name -> family; sequences without a family are never chosen.
+    ``groups`` (sequence -> scene group) keeps near-identical recordings
+    together: a group goes to validation or to training as a whole.
     Deterministic for a given seed.
     """
     rng = np.random.default_rng(seed)
@@ -133,7 +148,24 @@ def make_val_split(
         seqs = by_family[fam]
         want = max(1, round(fraction * len(seqs))) if fraction is not None else per_family
         k = min(want, max(len(seqs) - 1, 0))  # always leave one for training
-        val.extend(sorted(rng.choice(seqs, size=k, replace=False).tolist()) if k else [])
+        if not groups:
+            val.extend(sorted(rng.choice(seqs, size=k, replace=False).tolist()) if k else [])
+            continue
+        units: dict[str, list[str]] = {}
+        for seq in seqs:  # sequences without a group are their own unit
+            units.setdefault(groups.get(seq, f"seq:{seq}"), []).append(seq)
+        order = [sorted(units)[i] for i in rng.permutation(len(units))]
+        chosen: list[str] = []
+        for u in order:
+            if len(chosen) >= k:
+                break
+            if len(chosen) + len(units[u]) <= k and len(seqs) - len(chosen) - len(units[u]) >= 1:
+                chosen += units[u]
+        if not chosen and k:  # every unit larger than the quota: take the smallest that leaves training data
+            fits = [u for u in order if len(seqs) - len(units[u]) >= 1]
+            if fits:
+                chosen = units[min(fits, key=lambda u: len(units[u]))]
+        val.extend(sorted(chosen))
     return sorted(val)
 
 

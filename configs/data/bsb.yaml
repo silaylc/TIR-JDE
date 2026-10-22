@@ -12,6 +12,13 @@ data:
   splits:
     train: data/splits/bsb_train.txt
     val: data/splits/val.txt      # eğitim sekanslarından ayrılan doğrulama grubu
+  # Hiçbir bölümde kullanılmayan sekanslar (Strong Baseline'ın bildirdiği etiket hataları;
+  # BSB bu sekansların etiketlerini Track 3'tekiyle aynı bırakmış):
+  exclude:
+    - T_13                        # MultiUAV-230: yanlış etiket
+    - BB2P_01                     # MultiUAV-294: eksik etiket
+  # Sahne kümeleri: neredeyse aynı çekimler doğrulama/eğitim arasında bölünmez
+  scene_groups: data/splits/bsb_track3_map.csv
   image_ext: .jpg
   reid:
     # Strong Baseline makalesindeki gibi: her sekansın ilk 1/10'u (1.0 = hepsi)
