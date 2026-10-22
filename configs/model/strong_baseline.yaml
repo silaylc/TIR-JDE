@@ -16,6 +16,8 @@ model:
     config: logs/sbs_S50/config.yaml
     weights: null                 # null = bu çalıştırmada eğitilen ReID kullanılır
     max_epoch: null               # null = yazarın config'indeki epoch sayısı; duman testinde 1
+    extra: {}                     # ek Ultralytics argümanları; yalnızca duman testi için
+                                  # (ör. model.detector.extra.fraction=0.1 model.detector.extra.conf=0.1)
   tracker:
     img_size: 1600
     track_buffer: 60

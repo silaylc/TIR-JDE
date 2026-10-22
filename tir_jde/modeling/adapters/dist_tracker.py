@@ -36,6 +36,8 @@ class DistTrackerAdapter(Adapter):
                 "project": str(self.run_dir / "detector"),
                 "name": "train",
                 "exist_ok": True,
+                # extra Ultralytics arguments, only for short checks (e.g. the smoke test)
+                **(det.get("extra") or {}),
             },
         }
 

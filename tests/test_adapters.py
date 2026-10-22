@@ -150,3 +150,13 @@ def test_epoch_metrics_skip_nan_values(tmp_path):
     csv_file = tmp_path / "results.csv"
     csv_file.write_text("epoch, train/box_loss, train/cls_loss\n1, nan, 2.5\n")
     assert Adapter.epoch_metrics(csv_file) == [(1, {"train.cls_loss": 2.5})]
+
+
+def test_extra_detector_arguments_reach_ultralytics(tmp_path):
+    for name in ("dist_tracker_bsb", "strong_baseline_bsb"):
+        cfg = load_config(name, [f"paths.baselines_dir={tmp_path}",
+                                 "model.detector.extra.fraction=0.1", "model.detector.extra.conf=0.1"])
+        args = get_adapter(cfg, {"root": str(tmp_path / "data")}).detector_job()["train_args"]
+        assert (args["fraction"], args["conf"]) == (0.1, 0.1)
+        assert "fraction" not in get_adapter(load_config(name, [f"paths.baselines_dir={tmp_path}"]),
+                                             {"root": str(tmp_path)}).detector_job()["train_args"]

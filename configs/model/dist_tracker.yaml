@@ -9,6 +9,8 @@ model:
     epochs: 50                    # yazarın train.py değerleri
     batch: 16
     imgsz: 640
+    extra: {}                     # ek Ultralytics argümanları; yalnızca duman testi için
+                                  # (ör. model.detector.extra.fraction=0.1 model.detector.extra.conf=0.1)
   tracker:
     cfg: botsort.yaml             # yazarın cfg/trackers/botsort.yaml dosyası
     imgsz: 1280                   # yazarın track.py değerleri
