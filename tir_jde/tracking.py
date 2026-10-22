@@ -8,8 +8,8 @@ artifacts of a model end up in a single place. The run id is stored in
 Tracking server, in order of precedence:
 1. ``MLFLOW_TRACKING_URI`` environment variable (plus the usual MLflow
    credentials variables);
-2. DagsHub, when ``DAGSHUB_USER`` and ``DAGSHUB_TOKEN`` are set — the run goes
-   to ``https://dagshub.com/<owner>/<repo>.mlflow`` from ``tracking.dagshub``;
+2. DagsHub, when ``DAGSHUB_TOKEN`` is set — the run goes to
+   ``https://dagshub.com/<owner>/<repo>.mlflow`` from ``tracking.dagshub``;
 3. a local SQLite store at ``<work_dir>/mlflow.db`` with artifacts in
    ``<work_dir>/mlartifacts`` (MLflow no longer accepts new file stores).
    View it with ``mlflow ui --backend-store-uri sqlite:///<work_dir>/mlflow.db``.
@@ -34,11 +34,14 @@ def tracking_uri(cfg: dict) -> str:
     if os.environ.get("MLFLOW_TRACKING_URI"):
         return os.environ["MLFLOW_TRACKING_URI"]
     dagshub = cfg.get("tracking", {}).get("dagshub") or {}
-    if os.environ.get("DAGSHUB_USER") and os.environ.get("DAGSHUB_TOKEN") and dagshub.get("repo"):
-        # Always take the DagsHub credentials, even if older MLFLOW_* values are set.
-        os.environ["MLFLOW_TRACKING_USERNAME"] = os.environ["DAGSHUB_USER"]
-        os.environ["MLFLOW_TRACKING_PASSWORD"] = os.environ["DAGSHUB_TOKEN"]
-        owner = dagshub.get("owner") or os.environ["DAGSHUB_USER"]
+    token = os.environ.get("DAGSHUB_TOKEN")
+    owner = dagshub.get("owner") or os.environ.get("DAGSHUB_USER")
+    if token and owner and dagshub.get("repo"):
+        # DagsHub accepts the token as both user name and password, so a wrong or
+        # missing DAGSHUB_USER cannot break the login. Always overrides older
+        # MLFLOW_* values left in the environment.
+        os.environ["MLFLOW_TRACKING_USERNAME"] = token
+        os.environ["MLFLOW_TRACKING_PASSWORD"] = token
         return f"https://dagshub.com/{owner}/{dagshub['repo']}.mlflow"
     db = (Path(cfg["paths"]["work_dir"]) / "mlflow.db").resolve()
     db.parent.mkdir(parents=True, exist_ok=True)

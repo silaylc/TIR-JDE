@@ -71,7 +71,7 @@ koduyla puanlanır: HOTA, DetA, AssA, LocA, IDF1, IDP, IDR, MOTA, MOTP, IDSW, FP
 | Metrikler | `train.*` (epoch başına kayıp ve mAP), `val.*` (HOTA, IDF1, MOTA, …), `val.FPS_end_to_end` |
 | Dosyalar | `config/config.yaml`, ortamların `pip freeze` çıktıları, eğitim logları, `best.pt`, tahminler, grafikler, videolar |
 
-Kayıt yeri: `MLFLOW_TRACKING_URI` → yoksa `DAGSHUB_USER` + `DAGSHUB_TOKEN` ile
+Kayıt yeri: `MLFLOW_TRACKING_URI` → yoksa `DAGSHUB_TOKEN` ile
 `https://dagshub.com/slaaylc/TIR-JDE.mlflow` → yoksa `<work_dir>/mlflow.db` (yerel SQLite;
 `mlflow ui --backend-store-uri sqlite:///<work_dir>/mlflow.db` ile açılır).
 

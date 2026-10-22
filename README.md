@@ -176,7 +176,7 @@ not refute the thesis.
 Every compared model is trained and tested on the same BSB split, with the
 same validation group and the same TrackEval code. Each run's dataset, model
 type, parameters, training curves, test metrics and outputs go to one MLflow
-run (DagsHub when `DAGSHUB_USER`/`DAGSHUB_TOKEN` are set, local `mlruns/`
+run (DagsHub when `DAGSHUB_TOKEN` is set, a local SQLite `mlflow.db`
 otherwise).
 
 ```bash
