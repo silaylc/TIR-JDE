@@ -8,7 +8,7 @@ Usage (every command takes an experiment config plus optional key=value override
     python -m tir_jde.pipeline visualize  strong_baseline_bsb seed=1
     python -m tir_jde.pipeline run        dist_tracker_bsb seed=0 model.detector.epochs=2 tag=smoke
     python -m tir_jde.pipeline compare    strong_baseline_bsb dist_tracker_bsb --seeds 0 1 2
-    python -m tir_jde.pipeline make-val   strong_baseline_bsb --per-family 1
+    python -m tir_jde.pipeline make-val   strong_baseline_bsb --fraction 0.15
 
 Each experiment + seed (+ tag) is one MLflow run; every stage logs into it.
 """
@@ -153,16 +153,18 @@ def stage_compare(experiments: list[str], seeds: list[int], overrides: list[str]
     return csv_file
 
 
-def stage_make_val(cfg: dict, per_family: int, seed: int, force: bool) -> Path:
+def stage_make_val(cfg: dict, per_family: int, seed: int, force: bool,
+                   fraction: float | None = None) -> Path:
     data_cfg = cfg["data"]
     out = resolve_path(data_cfg["splits"]["val"])
     if out.exists() and not force:
         raise FileExistsError(f"{out} exists; split lists are fixed once created (use --force to overwrite).")
     train = dataset.read_split(data_cfg["splits"]["train"])
     families = {s: f for s in train if (f := dataset.family_of(s))}
-    val = dataset.make_val_split(train, families, per_family, seed)
+    val = dataset.make_val_split(train, families, per_family, seed, fraction)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(f"# validation group: {per_family} per family, seed {seed}\n" + "\n".join(val) + "\n")
+    rule = f"{fraction:g} of each family (min 1)" if fraction is not None else f"{per_family} per family"
+    out.write_text(f"# validation group: {rule}, seed {seed}\n" + "\n".join(val) + "\n")
     print(f"{len(val)} validation sequences -> {out}")
     return out
 
@@ -194,6 +196,8 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("make-val")
     p.add_argument("experiment")
     p.add_argument("--per-family", type=int, default=1)
+    p.add_argument("--fraction", type=float, default=None,
+                   help="share of each family for validation (min 1); overrides --per-family")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
@@ -203,7 +207,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     cfg = load_config(args.experiment, getattr(args, "overrides", []))
     if args.command == "make-val":
-        stage_make_val(cfg, args.per_family, args.seed, args.force)
+        stage_make_val(cfg, args.per_family, args.seed, args.force, args.fraction)
     elif args.command == "preprocess":
         stage_preprocess(cfg)
     elif args.command == "train":

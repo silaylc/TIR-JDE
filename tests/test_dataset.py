@@ -87,3 +87,12 @@ def test_family_and_validation_split_are_deterministic():
     a = dataset.make_val_split(train, families, per_family=1, seed=0)
     assert a == dataset.make_val_split(train, families, per_family=1, seed=0)
     assert {dataset.family_of(s) for s in a} == {"C", "T"}  # single-sequence families stay in training
+
+
+def test_proportional_validation_split_follows_family_sizes():
+    train = [f"T_{i:02d}" for i in range(20)] + [f"C_{i:02d}" for i in range(6)] + ["L_00", "L_01", "Takeoff_00"]
+    families = {s: dataset.family_of(s) for s in train}
+    val = dataset.make_val_split(train, families, per_family=1, seed=0, fraction=0.15)
+    count = {f: sum(dataset.family_of(s) == f for s in val) for f in ("T", "C", "L", "Takeoff")}
+    assert count == {"T": 3, "C": 1, "L": 1, "Takeoff": 0}
+    assert val == dataset.make_val_split(train, families, per_family=1, seed=0, fraction=0.15)

@@ -109,12 +109,19 @@ def family_of(seq: str) -> str | None:
 
 
 def make_val_split(
-    train: list[str], families: dict[str, str], per_family: int, seed: int
+    train: list[str], families: dict[str, str], per_family: int, seed: int,
+    fraction: float | None = None,
 ) -> list[str]:
-    """Picks ``per_family`` validation sequences from every family (scene type).
+    """Picks validation sequences from every family (scene type).
 
-    ``families`` maps sequence name -> family; sequences without a family are
-    never chosen. Deterministic for a given seed.
+    - ``fraction`` given: ``round(fraction * family size)`` sequences per family,
+      at least one, so the validation mix follows the family proportions of the
+      training data;
+    - otherwise: ``per_family`` sequences from every family.
+
+    Every family always keeps at least one sequence for training. ``families``
+    maps sequence name -> family; sequences without a family are never chosen.
+    Deterministic for a given seed.
     """
     rng = np.random.default_rng(seed)
     by_family: dict[str, list[str]] = {}
@@ -124,7 +131,8 @@ def make_val_split(
     val: list[str] = []
     for fam in sorted(by_family):
         seqs = by_family[fam]
-        k = min(per_family, max(len(seqs) - 1, 0))  # always leave one for training
+        want = max(1, round(fraction * len(seqs))) if fraction is not None else per_family
+        k = min(want, max(len(seqs) - 1, 0))  # always leave one for training
         val.extend(sorted(rng.choice(seqs, size=k, replace=False).tolist()) if k else [])
     return sorted(val)
 

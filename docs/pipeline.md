@@ -19,7 +19,7 @@ veri seti, model tipi, parametreleri, eğitim eğrileri, test metrikleri ve çı
 ## Komutlar
 
 ```bash
-python -m tir_jde.pipeline make-val   strong_baseline_bsb --per-family 1   # bir kez: data/splits/val.txt
+python -m tir_jde.pipeline make-val   strong_baseline_bsb --fraction 0.15  # bir kez: data/splits/val.txt
 python -m tir_jde.pipeline preprocess strong_baseline_bsb
 python -m tir_jde.pipeline run        dist_tracker_bsb seed=0               # train + evaluate + visualize
 python -m tir_jde.pipeline run        strong_baseline_bsb seed=0 tag=smoke model.detector.epochs=1

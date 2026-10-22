@@ -1,10 +1,17 @@
+# validation group: 0.15 of each family (min 1), seed 0
 BB1_01
 BB2P_01
 BB2_04
 B_05
-CF_00
-C_06
-L_00
-Landing_00
+CF_07
+C_00
+C_01
+C_05
+L_05
+Landing_01
 TF_05
-T_05
+T_15
+T_18
+T_21
+T_24
+T_31

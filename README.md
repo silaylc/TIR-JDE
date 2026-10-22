@@ -180,7 +180,7 @@ run (DagsHub when `DAGSHUB_USER`/`DAGSHUB_TOKEN` are set, local `mlruns/`
 otherwise).
 
 ```bash
-python -m tir_jde.pipeline make-val   strong_baseline_bsb --per-family 1   # once -> data/splits/val.txt
+python -m tir_jde.pipeline make-val   strong_baseline_bsb --fraction 0.15  # once -> data/splits/val.txt
 python -m tir_jde.pipeline preprocess strong_baseline_bsb
 python -m tir_jde.pipeline run        dist_tracker_bsb seed=0               # train + evaluate + visualize
 python -m tir_jde.pipeline compare    strong_baseline_bsb dist_tracker_bsb --seeds 0 1 2
