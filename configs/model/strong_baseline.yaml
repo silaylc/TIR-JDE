@@ -2,7 +2,7 @@ model:
   name: strong_baseline
   adapter: strong_baseline
   repo: https://github.com/silaylc/Yolov12_BoT-SORT_Re-ID
-  commit: c7c9ab0a9603            # yazarın commit'i: 071fe76
+  commit: f74b91d043e0            # yazarın commit'i: 071fe76
   python: ${SB_PYTHON:-python}    # Strong Baseline ortamının python'u (Python 3.11, torch 2.2.2)
   detector:
     arch: yolov12n                # sıfırdan eğitim: ultralytics/cfg/models/v12/<arch>.yaml

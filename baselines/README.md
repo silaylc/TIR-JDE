@@ -5,7 +5,7 @@ ortamında çalışır; TIR-JDE pipeline'ı onları `tir_jde/modeling/adapters/`
 
 | Model | Kullanılan depo (eğitilmemiş, yazar kodu) | Commit | Config |
 |---|---|---|---|
-| Strong Baseline | [silaylc/Yolov12_BoT-SORT_Re-ID](https://github.com/silaylc/Yolov12_BoT-SORT_Re-ID) | `c7c9ab0` | `configs/model/strong_baseline.yaml` |
+| Strong Baseline | [silaylc/Yolov12_BoT-SORT_Re-ID](https://github.com/silaylc/Yolov12_BoT-SORT_Re-ID) | `f74b91d` | `configs/model/strong_baseline.yaml` |
 | Dist-Tracker | [silaylc/YOLOv12-Dist-Tracker](https://github.com/silaylc/YOLOv12-Dist-Tracker) | `52b1729` | `configs/model/dist_tracker.yaml` |
 
 Kurallar:

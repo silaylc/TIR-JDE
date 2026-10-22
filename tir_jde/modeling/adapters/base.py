@@ -120,7 +120,12 @@ class Adapter:
     def _run(self, cmd: list[str], log_name: str, cwd: Path | None = None, env: dict | None = None) -> float:
         """Runs a command, streaming output to the console and to logs/<log_name>.log."""
         log_file = self.logs_dir / f"{log_name}.log"
-        full_env = {**os.environ, **(env or {})}
+        full_env = {**os.environ, "MPLBACKEND": "Agg", **(env or {})}  # headless plots
+        # The baseline's own environment first on PATH, so tools its code starts by
+        # name (e.g. FastReID's ``make`` -> ``python3 setup.py``) use that environment.
+        env_bin = Path(str(self.python)).parent
+        if env_bin != Path("."):
+            full_env["PATH"] = f"{env_bin}{os.pathsep}{full_env.get('PATH', '')}"
         t0 = time.perf_counter()
         console = _ConsoleThrottle(log_file)
         print(f"[{log_name}] tam log: {log_file}", flush=True)
