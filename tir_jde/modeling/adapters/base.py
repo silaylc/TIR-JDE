@@ -10,9 +10,11 @@ environment and returns results in the pipeline's shared formats:
 
 from __future__ import annotations
 
+import collections
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -21,6 +23,58 @@ from pathlib import Path
 from tir_jde.experiment import run_dir
 
 RUNNER = Path(__file__).with_name("_ultralytics_runner.py")
+
+# Console output is throttled so long trainings do not flood (and crash) the
+# notebook page; the full output always goes to logs/<name>.log.
+PROGRESS_RE = re.compile(r"\d+%\|.*\||\d+/\d+ \[\d")       # tqdm-style progress bars
+PROGRESS_SECONDS = float(os.environ.get("TIRJDE_PROGRESS_SECONDS", "60"))
+MAX_LINES_PER_MINUTE = int(os.environ.get("TIRJDE_MAX_LINES_PER_MINUTE", "40"))
+
+
+class _ConsoleThrottle:
+    """Progress bars: at most one line every PROGRESS_SECONDS. Other lines: up to
+    MAX_LINES_PER_MINUTE, the rest are counted and reported."""
+
+    def __init__(self, log_file: Path):
+        self.log_file = log_file
+        self.last_progress = 0.0
+        self.window_start = time.monotonic()
+        self.window_lines = 0
+        self.skipped = 0
+        self.tail: collections.deque[str] = collections.deque(maxlen=15)  # last hidden lines
+
+    def write(self, line: str) -> None:
+        now = time.monotonic()
+        if PROGRESS_RE.search(line):
+            if now - self.last_progress >= PROGRESS_SECONDS:
+                self.last_progress = now
+                sys.stdout.write(line.rstrip()[-180:] + "\n")
+                sys.stdout.flush()
+            return
+        if now - self.window_start >= 60:
+            self._report()
+            self.window_start, self.window_lines = now, 0
+        if self.window_lines < MAX_LINES_PER_MINUTE:
+            self.window_lines += 1
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        else:
+            self.skipped += 1
+            self.tail.append(line)
+
+    def _report(self) -> None:
+        if self.skipped:
+            sys.stdout.write(f"  ... {self.skipped} satır ekrana yazılmadı (tam log: {self.log_file})\n")
+            self.skipped = 0
+            self.tail.clear()
+
+    def close(self) -> None:
+        """Reports hidden lines and shows the last ones (errors usually end up there)."""
+        last = list(self.tail)
+        self._report()
+        if last:
+            sys.stdout.write("  --- ekrana yazılmayan son satırlar ---\n" + "".join(last))
+            sys.stdout.flush()
 
 
 class Adapter:
@@ -67,6 +121,8 @@ class Adapter:
         log_file = self.logs_dir / f"{log_name}.log"
         full_env = {**os.environ, **(env or {})}
         t0 = time.perf_counter()
+        console = _ConsoleThrottle(log_file)
+        print(f"[{log_name}] tam log: {log_file}", flush=True)
         with open(log_file, "a", encoding="utf-8") as log:
             log.write(f"$ {' '.join(map(str, cmd))}\n")
             proc = subprocess.Popen(
@@ -75,9 +131,10 @@ class Adapter:
             )
             assert proc.stdout is not None
             for line in proc.stdout:
-                sys.stdout.write(line)
                 log.write(line)
+                console.write(line)
             code = proc.wait()
+            console.close()
         if code != 0:
             raise RuntimeError(f"Command failed ({code}), see {log_file}: {' '.join(map(str, cmd))}")
         return time.perf_counter() - t0
