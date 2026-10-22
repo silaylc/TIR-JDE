@@ -13,6 +13,7 @@ from __future__ import annotations
 import collections
 import csv
 import json
+import math
 import os
 import re
 import subprocess
@@ -168,8 +169,10 @@ class Adapter:
                 metrics = {}
                 for k, v in row.items():
                     try:
-                        metrics[k.replace("(", "_").replace(")", "").replace("/", ".")] = float(v)
+                        value = float(v)
                     except (TypeError, ValueError):
-                        pass
+                        continue
+                    if math.isfinite(value):  # nan/inf (e.g. Dist-Tracker's box loss) are not logged
+                        metrics[k.replace("(", "_").replace(")", "").replace("/", ".")] = value
                 rows.append((epoch, metrics))
         return rows

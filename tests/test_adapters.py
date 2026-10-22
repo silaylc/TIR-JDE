@@ -142,3 +142,11 @@ def test_epoch_metrics_are_read_from_results_csv(tmp_path):
 def test_every_experiment_has_an_adapter(name, tmp_path):
     cfg = load_config(name, [f"paths.work_dir={tmp_path}"])
     assert get_adapter(cfg, {"root": str(tmp_path)}).name == cfg["model"]["adapter"]
+
+
+def test_epoch_metrics_skip_nan_values(tmp_path):
+    from tir_jde.modeling.adapters.base import Adapter
+
+    csv_file = tmp_path / "results.csv"
+    csv_file.write_text("epoch, train/box_loss, train/cls_loss\n1, nan, 2.5\n")
+    assert Adapter.epoch_metrics(csv_file) == [(1, {"train.cls_loss": 2.5})]

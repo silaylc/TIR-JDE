@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +35,59 @@ def stage_preprocess(cfg: dict) -> dict:
     return manifest
 
 
+class _LiveTrainLog:
+    """While a model trains, sends finished epochs to MLflow and refreshes the
+    training log there, so long runs can be followed on DagsHub."""
+
+    def __init__(self, adapter, run_id: str, every: float = 60.0, log_every: float = 600.0):
+        self.adapter, self.run_id = adapter, run_id
+        self.every, self.log_every = every, log_every
+        self.logged_epochs: set[int] = set()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._last_log_upload = time.monotonic()
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=30)
+        self._push_epochs()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self.every):
+            self._push_epochs()
+            if time.monotonic() - self._last_log_upload >= self.log_every:
+                self._last_log_upload = time.monotonic()
+                self._push_logs()
+
+    def _push_epochs(self) -> None:
+        try:
+            from mlflow.entities import Metric
+            from mlflow.tracking import MlflowClient
+
+            client, now = MlflowClient(), int(time.time() * 1000)
+            for results in self.adapter.run_dir.glob("detector/**/results.csv"):
+                for epoch, metrics in self.adapter.epoch_metrics(results):
+                    if epoch in self.logged_epochs or not metrics:
+                        continue
+                    client.log_batch(self.run_id, metrics=[
+                        Metric(f"train.{k}", v, now, epoch) for k, v in metrics.items()])
+                    self.logged_epochs.add(epoch)
+        except Exception as e:  # noqa: BLE001 - live logging must never stop training
+            print(f"[mlflow] canlı kayıt atlandı: {e}", flush=True)
+
+    def _push_logs(self) -> None:
+        try:
+            from mlflow.tracking import MlflowClient
+
+            for log in self.adapter.logs_dir.glob("train_*.log"):
+                MlflowClient().log_artifact(self.run_id, str(log), artifact_path="logs")
+        except Exception as e:  # noqa: BLE001
+            print(f"[mlflow] log yüklenemedi: {e}", flush=True)
+
+
 def stage_train(cfg: dict) -> dict:
     from tir_jde.modeling.adapters import get_adapter
     from tir_jde.tracking import log_environment, mlflow_run
@@ -46,11 +101,17 @@ def stage_train(cfg: dict) -> dict:
         mlflow.log_dict(manifest["sequences"], "data/sequences.json")
         log_environment(mlflow, cfg["model"]["name"], adapter.python)
 
-        weights = adapter.train()
+        live = _LiveTrainLog(adapter, mlflow.active_run().info.run_id)
+        live.start()
+        try:
+            weights = adapter.train()
+        finally:
+            live.stop()
         (adapter.run_dir / "weights.json").write_text(json.dumps(weights, indent=2))
 
         for epoch, metrics in adapter.epoch_metrics(Path(weights.get("detector_results", ""))):
-            mlflow.log_metrics({f"train.{k}": v for k, v in metrics.items()}, step=epoch)
+            if epoch not in live.logged_epochs:
+                mlflow.log_metrics({f"train.{k}": v for k, v in metrics.items()}, step=epoch)
         if Path(weights["detector"]).exists():
             mlflow.log_artifact(weights["detector"], artifact_path="weights")
         for log in adapter.logs_dir.glob("train_*.log"):
