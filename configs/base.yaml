@@ -18,7 +18,7 @@ tracking:
   # DagsHub: DAGSHUB_USER ve DAGSHUB_TOKEN ortam değişkenleri tanımlıysa kayıtlar
   # https://dagshub.com/<owner>/<repo>.mlflow adresine gider.
   dagshub:
-    owner: silaylc
+    owner: slaaylc                # DagsHub kullanıcı adı (GitHub adından farklı)
     repo: TIR-JDE
 
 eval:
