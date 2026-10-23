@@ -4,6 +4,10 @@ model:
   repo: https://github.com/silaylc/Yolov12_BoT-SORT_Re-ID
   commit: 4ecdd2431818            # yazarın commit'i: 071fe76 (+ eksik resim, FastReID zero_grad uyumu)
   python: ${SB_PYTHON:-python}    # Strong Baseline ortamının python'u (Python 3.11, torch 2.2.2)
+  # FastReID her ReID değerlendirmesinde Cython modülünü yeniden derleyip bu dosyaları yeniden üretir;
+  # kod değişikliği sayılmaz, çalıştırmadan önce repodaki haline döndürülür.
+  generated_files:
+    - BoT-SORT/fast_reid/fastreid/evaluation/rank_cylib/*.c
   detector:
     arch: yolov12n                # sıfırdan eğitim: ultralytics/cfg/models/v12/<arch>.yaml
     init: scratch                 # scratch | <.pt yolu> (örn. COCO yolov12n.pt)

@@ -35,6 +35,29 @@ def stage_preprocess(cfg: dict) -> dict:
     return manifest
 
 
+def _fastreid_metrics(path: Path) -> list[tuple[int, dict[str, float]]]:
+    """FastReID's metrics.json (one JSON object per line) -> [(iteration, losses/lr)]."""
+    import math
+
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # line still being written
+        step = row.pop("iteration", None)
+        if step is None:
+            continue
+        keep = {k: float(v) for k, v in row.items()
+                if (k.startswith("loss") or k in ("total_loss", "lr"))
+                and isinstance(v, (int, float)) and math.isfinite(v)}
+        if keep:
+            rows.append((int(step), keep))
+    return rows
+
+
 class _LiveTrainLog:
     """While a model trains, sends finished epochs to MLflow and refreshes the
     training log there, so long runs can be followed on DagsHub."""
@@ -43,6 +66,7 @@ class _LiveTrainLog:
         self.adapter, self.run_id = adapter, run_id
         self.every, self.log_every = every, log_every
         self.logged_epochs: set[int] = set()
+        self.logged_reid_steps: set[int] = set()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._last_log_upload = time.monotonic()
@@ -68,6 +92,7 @@ class _LiveTrainLog:
             from mlflow.tracking import MlflowClient
 
             client, now = MlflowClient(), int(time.time() * 1000)
+            # detector: one row per epoch in Ultralytics' results.csv
             for results in self.adapter.run_dir.glob("detector/**/results.csv"):
                 for epoch, metrics in self.adapter.epoch_metrics(results):
                     if epoch in self.logged_epochs or not metrics:
@@ -75,6 +100,13 @@ class _LiveTrainLog:
                     client.log_batch(self.run_id, metrics=[
                         Metric(f"train.{k}", v, now, epoch) for k, v in metrics.items()])
                     self.logged_epochs.add(epoch)
+            # ReID (FastReID): one JSON line every 200 iterations and at each epoch end
+            for step, metrics in _fastreid_metrics(self.adapter.run_dir / "reid" / "metrics.json"):
+                if step in self.logged_reid_steps:
+                    continue
+                client.log_batch(self.run_id, metrics=[
+                    Metric(f"reid.{k}", v, now, step) for k, v in metrics.items()])
+                self.logged_reid_steps.add(step)
         except Exception as e:  # noqa: BLE001 - live logging must never stop training
             print(f"[mlflow] canlı kayıt atlandı: {e}", flush=True)
 

@@ -150,7 +150,18 @@ def test_epoch_metrics_skip_nan_values(tmp_path):
 
     csv_file = tmp_path / "results.csv"
     csv_file.write_text("epoch, train/box_loss, train/cls_loss\n1, nan, 2.5\n")
-    assert Adapter.epoch_metrics(csv_file) == [(1, {"train.cls_loss": 2.5})]
+    assert Adapter.epoch_metrics(csv_file) == [(1, {"train.box_loss_nan": 1.0, "train.cls_loss": 2.5})]
+
+
+def test_fastreid_losses_are_read_per_iteration(tmp_path):
+    from tir_jde.pipeline import _fastreid_metrics
+
+    f = tmp_path / "metrics.json"
+    f.write_text('{"iteration": 199, "loss_cls": 3.2, "loss_triplet": 0.8, "lr": 3.5e-05, "time": 0.4}\n'
+                 '{"iteration": 399, "loss_cls": 2.9, "loss_triplet": NaN, "total_loss": 3.5}\n'
+                 '{"iteration": 59')
+    assert _fastreid_metrics(f) == [(199, {"loss_cls": 3.2, "loss_triplet": 0.8, "lr": 3.5e-05}),
+                                    (399, {"loss_cls": 2.9, "total_loss": 3.5})]
 
 
 def test_extra_detector_arguments_reach_ultralytics(tmp_path):
@@ -161,3 +172,33 @@ def test_extra_detector_arguments_reach_ultralytics(tmp_path):
         assert (args["fraction"], args["conf"]) == (0.1, 0.1)
         assert "fraction" not in get_adapter(load_config(name, [f"paths.baselines_dir={tmp_path}"]),
                                              {"root": str(tmp_path)}).detector_job()["train_args"]
+
+
+def test_regenerated_files_are_restored_but_code_changes_are_refused(tmp_path):
+    from tir_jde.modeling.adapters.base import Adapter
+
+    repo = tmp_path / "repo"
+    (repo / "lib").mkdir(parents=True)
+    (repo / "lib" / "rank_cy.c").write_text("original\n")
+    (repo / "code.py").write_text("x = 1\n")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-qm", "init"], check=True)
+
+    class Fake(Adapter):
+        repo_dir = repo
+
+        def __init__(self):
+            self.model_cfg = {"generated_files": ["lib/*.c"]}
+            self.logs_dir = tmp_path / "logs"
+            self.logs_dir.mkdir(exist_ok=True)
+            self.python = "python"
+
+    (repo / "lib" / "rank_cy.c").write_text("regenerated\n")
+    Fake().ensure_repo()
+    assert (repo / "lib" / "rank_cy.c").read_text() == "original\n"
+
+    (repo / "code.py").write_text("x = 2\n")
+    with pytest.raises(RuntimeError, match="local changes"):
+        Fake().ensure_repo()

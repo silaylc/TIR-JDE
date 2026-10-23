@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import collections
 import csv
+import fnmatch
 import json
 import math
 import os
@@ -107,6 +108,13 @@ class Adapter:
             if not current.startswith(commit):
                 self._run(["git", "-C", str(repo), "fetch", "--quiet", "origin"], "fetch")
                 self._run(["git", "-C", str(repo), "checkout", "--quiet", commit], "checkout")
+        # Files the baseline's own code regenerates at run time (e.g. FastReID re-cythonizes its
+        # evaluation module) are restored instead of being treated as code changes.
+        generated = self.model_cfg.get("generated_files") or []
+        changed = self._git("diff", "--name-only", "HEAD").splitlines()
+        restore = [f for f in changed if any(fnmatch.fnmatch(f, pat) for pat in generated)]
+        if restore:
+            self._run(["git", "-C", str(repo), "checkout", "--", *restore], "restore_generated")
         dirty = self._git("status", "--porcelain", "--untracked-files=no")
         if dirty:
             raise RuntimeError(f"{repo} has local changes; baselines must run unmodified:\n{dirty}")
@@ -177,7 +185,10 @@ class Adapter:
                         value = float(v)
                     except (TypeError, ValueError):
                         continue
-                    if math.isfinite(value):  # nan/inf (e.g. Dist-Tracker's box loss) are not logged
-                        metrics[k.replace("(", "_").replace(")", "").replace("/", ".")] = value
+                    name = k.replace("(", "_").replace(")", "").replace("/", ".")
+                    if math.isfinite(value):
+                        metrics[name] = value
+                    else:  # nan/inf (e.g. Dist-Tracker's box loss): MLflow gets a 1.0 flag instead
+                        metrics[f"{name}_nan"] = 1.0
                 rows.append((epoch, metrics))
         return rows
