@@ -117,3 +117,38 @@ def test_scene_groups_are_never_split_and_excluded_sequences_drop_out(tmp_path):
     cfg["exclude"] = ["T_05"]
     with pytest.raises(ValueError, match="Excluded"):
         dataset.resolve_splits(cfg)
+
+
+def test_first_frame_file_is_written_even_when_frame_one_is_empty(tmp_path):
+    labels = np.array([[2, 1, 10, 20, 8, 6, 1, 1, 1.0], [3, 1, 11, 20, 8, 6, 1, 1, 1.0]])
+    out = tmp_path / "TestLabels_FirstFrameOnly" / "E_00.txt"
+    dataset.write_mot(out, labels[labels[:, 0] == 1], gt=True)
+    assert out.exists() and out.read_text() == ""  # like MultiUAV-068: the file exists, empty
+
+
+def test_first_frame_labels_match_the_first_image_of_the_sequence(tmp_path):
+    """GT frame 1 must be the first image the tracker reads, also with BSB's 0-based file names."""
+    import cv2
+
+    raw = tmp_path / "raw"
+    (raw / "frames" / "Z_00").mkdir(parents=True)
+    (raw / "labels").mkdir()
+    rows = []
+    for f in range(1, 6):  # label frames 1..5 <-> files 00000..00004, as in BSB TrainImages
+        img = np.full((64, 96, 3), 40, np.uint8)
+        x = 5 + 12 * (f - 1)  # the target moves 12 px per frame: each frame is recognisable
+        img[20:26, x:x + 8] = 220
+        cv2.imwrite(str(raw / "frames" / "Z_00" / f"{f - 1:05d}.jpg"), img)
+        rows.append(f"{f},1,{x},20,8,6,1,1,1.0")
+    (raw / "labels" / "Z_00.txt").write_text("\n".join(rows) + "\n")
+    data_cfg = {"raw_root": str(raw), "frames_dir": "frames", "labels_dir": "labels", "image_ext": ".jpg"}
+
+    out = tmp_path / "track"
+    dataset.export_tracking_input(["Z_00"], data_cfg, tmp_path / "cache", out, tmp_path / "gt")
+
+    first_image = sorted((out / "Test_imgs" / "Z_00").glob("*.*"))[0]  # the order the tracker reads
+    x, y, w, h = (int(float(v)) for v in
+                  (out / "TestLabels_FirstFrameOnly" / "Z_00.txt").read_text().split(",")[2:6])
+    img = cv2.imread(str(first_image), cv2.IMREAD_GRAYSCALE)
+    assert img[y:y + h, x:x + w].mean() > 180          # the frame-1 box sits on the target
+    assert img[y:y + h, x + 12:x + 12 + w].mean() < 100  # and not where frame 2 has it

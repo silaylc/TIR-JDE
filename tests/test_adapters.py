@@ -202,3 +202,101 @@ def test_regenerated_files_are_restored_but_code_changes_are_refused(tmp_path):
     (repo / "code.py").write_text("x = 2\n")
     with pytest.raises(RuntimeError, match="local changes"):
         Fake().ensure_repo()
+
+
+FAKE_TRACKING = textwrap.dedent(
+    '''
+    import glob, os
+
+    class _T:
+        def __init__(self, v): self.v = v
+        def cpu(self): return self
+        def numpy(self): return self
+        def astype(self, t): return _T([int(x) for x in self.v])
+        def __iter__(self): return iter(self.v)
+
+    class _Boxes:
+        def __init__(self, rows):
+            self.xyxy = _T([r[:4] for r in rows])
+            self.conf = _T([r[4] for r in rows])
+            self.id = _T(list(range(1, len(rows) + 1))) if rows else None
+
+    class _Result:
+        def __init__(self, path, rows): self.path, self.boxes = path, _Boxes(rows)
+        def update(self, boxes): self.boxes = _Boxes(boxes.rows)
+
+    class _Predictor:
+        pass
+
+    class YOLO:
+        """Detector finds one box per frame; every callback runs, in registration order."""
+        def __init__(self, weights): self.callbacks = []
+        def add_callback(self, event, func): self.callbacks.append(func)
+        def track(self, source, stream, verbose, **kw):
+            for path in sorted(glob.glob(os.path.join(source, "*.*"))):
+                pred = _Predictor()
+                pred.results = [_Result(path, [[50.0, 60.0, 58.0, 66.0, 0.5, 0.0]])]
+                for cb in self.callbacks:
+                    cb(pred)
+                yield pred.results[0]
+    '''
+)
+
+FAKE_TORCH = textwrap.dedent(
+    '''
+    float32 = "float32"
+
+    class _Tensor:
+        def __init__(self, rows): self.rows = [list(r) for r in rows]
+        def reshape(self, *shape): return self
+        def clone(self): return _Tensor(self.rows)
+
+    def tensor(rows, dtype=None):
+        return _Tensor(rows)
+    '''
+)
+
+
+def _tracking_job(tmp_path, first_frame_dir):
+    lib = tmp_path / "fork"
+    (lib / "ultralytics").mkdir(parents=True)
+    (lib / "ultralytics" / "__init__.py").write_text(FAKE_TRACKING)
+    (lib / "torch").mkdir()
+    (lib / "torch" / "__init__.py").write_text(FAKE_TORCH)
+    frames = _frames(tmp_path / "frames")  # C_02: 4 frames, T_02: 3 frames
+    job = {"mode": "track", "lib_root": str(lib), "cwd": str(tmp_path), "weights": "best.pt",
+           "frames_root": str(frames), "out_dir": str(tmp_path / "pred"), "track_args": {},
+           "first_frame_dir": first_frame_dir, "result_file": str(tmp_path / "result.json")}
+    (tmp_path / "job.json").write_text(json.dumps(job))
+    subprocess.run([sys.executable, str(RUNNER), str(tmp_path / "job.json")], check=True)
+    return {s: (tmp_path / "pred" / f"{s}.txt").read_text().splitlines() for s in ("C_02", "T_02")}
+
+
+def test_first_frame_uses_the_given_boxes_then_the_detector(tmp_path):
+    first = tmp_path / "first"
+    first.mkdir()
+    (first / "C_02.txt").write_text("1,1,10,20,8,6,1,1,1.0\n1,2,40,30,6,5,1,1,1.0\n")
+    (first / "T_02.txt").write_text("")  # empty first frame (like MultiUAV-068)
+    out = _tracking_job(tmp_path, str(first))
+
+    c = [ln for ln in out["C_02"] if ln.startswith("1,")]
+    assert c == ["1,1,10.00,20.00,8.00,6.00,1.0000,-1,-1,-1", "1,2,40.00,30.00,6.00,5.00,1.0000,-1,-1,-1"]
+    assert all(ln.endswith("0.5000,-1,-1,-1") for ln in out["C_02"] if not ln.startswith("1,"))
+    assert len(out["C_02"]) == 2 + 3  # frames 2-4 come from the detector
+    assert not any(ln.startswith("1,") for ln in out["T_02"])  # no track on an empty first frame
+    assert len(out["T_02"]) == 2
+
+
+def test_without_first_frame_boxes_tracking_is_unchanged(tmp_path):
+    out = _tracking_job(tmp_path, None)
+    assert out["C_02"][0] == "1,1,50.00,60.00,8.00,6.00,0.5000,-1,-1,-1"
+    assert len(out["C_02"]) == 4 and len(out["T_02"]) == 3
+
+
+def test_dist_tracker_first_frame_switch(tmp_path):
+    def job(*overrides):
+        cfg = load_config("dist_tracker_bsb", [f"paths.baselines_dir={tmp_path}", *overrides])
+        return get_adapter(cfg, {"root": str(tmp_path / "data")}).track_job({"detector": "best.pt"})
+
+    assert job()["first_frame_dir"] is None  # off until verified on Colab with the real Ultralytics
+    assert job("model.tracker.first_frame_gt=true")["first_frame_dir"].endswith("track/val/TestLabels_FirstFrameOnly")

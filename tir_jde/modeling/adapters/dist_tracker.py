@@ -54,6 +54,9 @@ class DistTrackerAdapter(Adapter):
             "weights": weights["detector"],
             "frames_root": str(self.data_root / "track" / "val" / "Test_imgs"),
             "out_dir": str(self.run_dir / "predictions"),
+            # BSB protocol: the tracker starts from the given first-frame boxes
+            "first_frame_dir": (str(self.data_root / "track" / "val" / "TestLabels_FirstFrameOnly")
+                                if trk.get("first_frame_gt") else None),
             "track_args": {
                 "tracker": trk["cfg"],
                 "imgsz": trk["imgsz"],

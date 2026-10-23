@@ -62,6 +62,40 @@ koduyla puanlanır: HOTA, DetA, AssA, LocA, IDF1, IDP, IDR, MOTA, MOTP, IDSW, FP
 
 **Compare** — her deneyin seed'leri üzerinden ortalama ± std tablo (`comparison.csv`) ve grafik.
 
+## Değerlendirme protokolü (BSB)
+
+Üç yöntem (Strong Baseline, Dist-Tracker, TIR-JDE) aynı protokolle çalıştırılır ve bu protokol BSB'ninkiyle aynıdır.
+
+| Kural | İçerik |
+|---|---|
+| Girdi | Sekansın bütün kareleri + `TestLabels_FirstFrameOnly` (1. karenin verilen kutuları) |
+| 1. kare | Takipçi verilen kutularla başlatılır (güven 1.0); 1. karede dedektör kullanılmaz |
+| 2. kare ve sonrası | Dedektör + takipçi |
+| Boş 1. kare | 1. karede iz olmaz (örn. MultiUAV-068) |
+| Çıktı | `frame,id,x,y,w,h,score,-1,-1,-1`; kare 1'den başlar, koordinatlar orijinal 640×512 |
+| Değerlendirme | TrackEval, tüm kareler (1. kare dahil); ana ölçüt HOTA, yanında IDF1, MOTA, IDSW |
+
+Yöntemlerin uyumu:
+
+- **Strong Baseline:** yazarın `tools/predict_track3.py`'si 1. karede dedektör çıktısı yerine verilen kutuları kullanır; değişiklik yok.
+- **Dist-Tracker:** makale problemi "ilk karedeki bilinen tespitlerle başlatılan takip" diye tanımlar, ancak
+  FLIT'in algoritmasında ilk kareye özel bir adım yoktur; repodaki `track.py` `model.track` çağırır, ilk kare GT'si
+  almaz ve FLIT yerine Ultralytics BoT-SORT (`botsort.yaml`) çalıştırır. **İlk kare başlatması makalenin ya da
+  yazar kodunun parçası değildir; BSB protokolüne uymak için eklenen bir protokol uyarlamasıdır.** TIR-JDE'nin
+  runner'ı (`_ultralytics_runner.py`), yazarın koduna dokunmadan, 1. karenin tespitlerini verilen kutularla değiştiren
+  bir `on_predict_postprocess_end` callback'i kaydeder. Callback takipçininkinden önce kaydedilir ve 1. kareyi dosya
+  adından tanır; sonraki kareler `model.track` ile birebir aynıdır. Config: `model.tracker.first_frame_gt`
+  (gerçek Ultralytics ile `protocol.first_frame_match = 1.0` doğrulanana kadar varsayılan `false`).
+- **TIR-JDE:** takipçi bu protokolle yazılır.
+
+**Bilinen davranış (boş 1. kare):** Ultralytics takipçisi tespit olmayan karede çağrılmaz (`if len(det) == 0: continue`),
+bu yüzden iç kare sayacı ilerlemez ve ilk tespit gelen kare takipçi için "1. kare" olur; izler orada hemen aktif
+edilir. Bu yazar kodundaki mevcut davranıştır (SB'de de benzeri vardır) ve yalnızca 1. karesi boş birkaç sekansı etkiler.
+
+**Otomatik denetim:** her değerlendirmede çıktının 1. karesi verilen kutularla karşılaştırılır (IoU ≥ 0.99) ve MLflow'a
+`protocol.first_frame_match` (1.0 olmalı) ve `protocol.first_frame_extra` (0 olmalı) olarak yazılır. Uyumsuzlukta
+ekrana uyarı basılır.
+
 ## MLflow'da ne kaydedilir
 
 | | |

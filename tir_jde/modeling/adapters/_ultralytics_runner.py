@@ -9,11 +9,15 @@ Modes:
 - ``train``: ``YOLO(model).train(**train_args)``; prints the save directory.
 - ``track``: ``YOLO(weights).track(...)`` on every sequence folder, writes one
   MOTChallenge file per sequence and the end-to-end frames-per-second.
+  With ``first_frame_dir`` (BSB protocol), the detections of each sequence's
+  first frame are replaced by the given first-frame boxes before the tracker
+  sees them; every later frame runs exactly as ``model.track`` does.
 
 Only the standard library is imported at module level so the file works on
 the Python versions the baselines pin (3.8+).
 """
 
+import glob
 import json
 import os
 import sys
@@ -47,6 +51,37 @@ def _train(job: dict) -> dict:
     return {"save_dir": str(save_dir), "best": str(save_dir / "weights" / "best.pt")}
 
 
+def _read_first_frame(path: Path) -> list:
+    """``TestLabels_FirstFrameOnly`` file (``frame,id,x,y,w,h,...``) -> rows ``[x1, y1, x2, y2, 1.0, 0.0]``."""
+    rows = []
+    if path.exists():
+        for line in path.read_text().splitlines():
+            v = line.strip().split(",")
+            if len(v) >= 6:
+                x, y, w, h = (float(t) for t in v[2:6])
+                rows.append([x, y, x + w, y + h, 1.0, 0.0])
+    return rows
+
+
+def _first_frame_callback(first_image: str, gt_rows: list):
+    """``on_predict_postprocess_end`` callback that must run before the tracker's.
+
+    On the sequence's first image (recognised by file name, the same order the
+    loader reads: sorted glob) the detections are replaced by the given boxes
+    with confidence 1. An empty file gives no boxes, so no track starts there.
+    """
+    import torch
+
+    gt = torch.tensor(gt_rows, dtype=torch.float32).reshape(-1, 6)
+
+    def callback(predictor) -> None:
+        for result in predictor.results:
+            if Path(result.path).name == first_image:
+                result.update(boxes=gt.clone())
+
+    return callback
+
+
 def _track(job: dict) -> dict:
     YOLO = _import_fork(job["lib_root"])
     out_dir = Path(job["out_dir"])
@@ -55,7 +90,14 @@ def _track(job: dict) -> dict:
     for seq_dir in sorted(Path(job["frames_root"]).iterdir()):
         if not seq_dir.is_dir():
             continue
-        model = YOLO(job["weights"])  # fresh tracker state per sequence
+        model = YOLO(job["weights"])  # fresh tracker state (and callbacks) per sequence
+        if job.get("first_frame_dir"):
+            images = sorted(glob.glob(os.path.join(str(seq_dir), "*.*")))  # the loader's own order
+            if images:
+                gt_rows = _read_first_frame(Path(job["first_frame_dir"]) / f"{seq_dir.name}.txt")
+                # registered before model.track() adds the tracker's callback -> runs first
+                model.add_callback("on_predict_postprocess_end",
+                                   _first_frame_callback(Path(images[0]).name, gt_rows))
         rows = []
         t0 = time.perf_counter()
         for frame_idx, result in enumerate(

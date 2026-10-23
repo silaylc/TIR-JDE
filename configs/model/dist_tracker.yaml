@@ -15,3 +15,5 @@ model:
     cfg: botsort.yaml             # yazarın cfg/trackers/botsort.yaml dosyası
     imgsz: 1280                   # yazarın track.py değerleri
     conf: 0.0
+    first_frame_gt: false         # BSB protokolü (1. kare verilen kutularla). Colab'da first_frame_match = 1.0
+                                  # doğrulanınca true yapılacak; o zamana kadar komut satırından açılır.

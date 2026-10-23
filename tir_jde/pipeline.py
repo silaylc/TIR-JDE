@@ -152,6 +152,7 @@ def stage_train(cfg: dict) -> dict:
 
 
 def stage_evaluate(cfg: dict) -> dict:
+    from tir_jde.eval.protocol import first_frame_check
     from tir_jde.eval.trackeval_runner import evaluate
     from tir_jde.modeling.adapters import get_adapter
     from tir_jde.tracking import mlflow_run
@@ -171,6 +172,12 @@ def stage_evaluate(cfg: dict) -> dict:
                           metrics=tuple(cfg.get("eval", {}).get("metrics", ("HOTA", "CLEAR", "Identity"))))
         result["fps"] = tracked["fps"]
         result["frames"] = tracked["frames"]
+        # BSB protocol: frame 1 of the output must reproduce the given first-frame boxes
+        result["protocol"] = first_frame_check(gt_dir, Path(tracked["pred_dir"]), manifest["sequences"]["val"])
+        mlflow.log_metrics({"protocol.first_frame_match": result["protocol"]["match"],
+                            "protocol.first_frame_extra": result["protocol"]["extra"]})
+        if result["protocol"]["match"] < 1.0 or result["protocol"]["extra"]:
+            print(f"!!! PROTOKOL UYARISI: 1. kare verilen kutularla uyuşmuyor {result['protocol']}", flush=True)
 
         mlflow.log_metrics({f"val.{k}": float(v) for k, v in result["overall"].items()})
         mlflow.log_metric("val.FPS_end_to_end", float(tracked["fps"]))
@@ -181,7 +188,9 @@ def stage_evaluate(cfg: dict) -> dict:
         mlflow.log_artifact(str(adapter.run_dir / "per_sequence.csv"), artifact_path="eval")
         for log in adapter.logs_dir.glob("track*.log"):
             mlflow.log_artifact(str(log), artifact_path="logs")
-    print(json.dumps(result["overall"], indent=2), f"\nFPS (end-to-end): {tracked['fps']:.1f}")
+    print(json.dumps(result["overall"], indent=2), f"\nFPS (end-to-end): {tracked['fps']:.1f}",
+          f"\nProtokol (1. kare = verilen kutular): {result['protocol']['match']:.3f}, fazla kutu: "
+          f"{result['protocol']['extra']}")
     return result
 
 
