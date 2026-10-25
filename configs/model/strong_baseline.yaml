@@ -23,6 +23,7 @@ model:
     extra: {}                     # ek Ultralytics argümanları; yalnızca duman testi için
                                   # (ör. model.detector.extra.fraction=0.1 model.detector.extra.conf=0.1)
   tracker:
-    img_size: 1600
+    imgsz: 1600                   # yazarın run_track3 ayarı
+    conf: null                    # null = betiğin varsayılanı (--conf-thres 0.09, yazar tarifi)
     track_buffer: 60
     agnostic_nms: true

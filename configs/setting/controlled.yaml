@@ -1,0 +1,20 @@
+# Kontrollü kıyas ayarları: başlık tablosundaki bütün yöntemler (SB, Dist-Tracker, TIR-JDE) aynı değerlerle
+# eğitilir ve takip edilir. Yazar tarifleri ayrı deneylerde (strong_baseline_bsb, dist_tracker_bsb) kalır.
+# İki fork'un Ultralytics varsayılanları farklı olan ayarları burada açıkça eşitlenir.
+model:
+  detector:
+    epochs: 50                  # GEÇİCİ: SB 10 epoch süre ölçümünden sonra kesinleşecek
+    batch: 16                   # 1280'de iki modelde de sığan değer; nbs=64 ile etkin batch 64
+    imgsz: 1280                 # eğitim = çıkarım çözünürlüğü
+    extra:                      # Ultralytics train() argümanları, iki modelde aynı
+      multi_scale: false        # SB: false, Dist: true -> false
+      single_cls: true
+      amp: true                 # Dist nan ön kontrolüne göre kesinleşecek
+      optimizer: auto
+      warmup_bias_lr: 0.1       # SB: 0.0, Dist: 0.1 -> Ultralytics varsayılanı 0.1
+      copy_paste: 0.0           # SB: 0.1, Dist: 0.0 -> Ultralytics varsayılanı 0.0
+      close_mosaic: 10
+  tracker:
+    imgsz: 1280                 # = eğitim çözünürlüğü
+    conf: 0.01                  # dedektör çıktı eşiği (Dist makalesi 0.01); takipçi iç eşikleri yöntemin kendi
+    first_frame_gt: true        # BSB protokolü

@@ -1,0 +1,6 @@
+# Strong Baseline, kontrollü kıyas ayarlarıyla (başlık tablosu)
+defaults: [base, data/bsb, model/strong_baseline, setting/controlled]
+name: strong_baseline_bsb_ctrl
+model:
+  detector:
+    arch: yolov12n              # zaten yazar tarifi

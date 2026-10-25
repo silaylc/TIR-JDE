@@ -1,0 +1,8 @@
+# Dist-Tracker, kontrollü kıyas ayarlarıyla (başlık tablosu).
+# Dist'in yolo12-UAV.yaml'ı standart yolo12.yaml ile aynı mimaridir (yalnız nc=1 ve sadece 's' ölçeği);
+# burada aynı mimari 'n' ölçeğinde kullanılır. Dist'in kaybı (NWD + şekil + WIoU) fork'ta aynen kalır.
+defaults: [base, data/bsb, model/dist_tracker, setting/controlled]
+name: dist_tracker_bsb_ctrl
+model:
+  detector:
+    cfg: yolo12n.yaml           # Ultralytics: yolo12.yaml, ölçek 'n' (yazar tarifinde 's')

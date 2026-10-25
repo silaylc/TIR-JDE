@@ -300,3 +300,32 @@ def test_dist_tracker_first_frame_switch(tmp_path):
 
     assert job()["first_frame_dir"] is None  # off until verified on Colab with the real Ultralytics
     assert job("model.tracker.first_frame_gt=true")["first_frame_dir"].endswith("track/val/TestLabels_FirstFrameOnly")
+
+
+SHARED_TRAIN_ARGS = ("epochs", "batch", "imgsz", "multi_scale", "single_cls", "amp", "optimizer",
+                     "warmup_bias_lr", "copy_paste", "close_mosaic", "seed", "deterministic")
+
+
+def test_controlled_experiments_train_and_track_with_the_same_settings(tmp_path):
+    ov = [f"paths.baselines_dir={tmp_path}"]
+    sb = get_adapter(load_config("strong_baseline_bsb_ctrl", ov), {"root": str(tmp_path / "d")})
+    dist = get_adapter(load_config("dist_tracker_bsb_ctrl", ov), {"root": str(tmp_path / "d")})
+    a, b = sb.detector_job()["train_args"], dist.detector_job()["train_args"]
+    assert {k: a[k] for k in SHARED_TRAIN_ARGS} == {k: b[k] for k in SHARED_TRAIN_ARGS}
+    assert (a["imgsz"], a["multi_scale"], a["copy_paste"]) == (1280, False, 0.0)
+    assert sb.detector_job()["model"].endswith("yolov12n.yaml") and dist.detector_job()["model"] == "yolo12n.yaml"
+
+    cmd = sb.track_command({"detector": "w.pt", "reid": "r.pth"}, Path("/o"))
+    trk = dist.track_job({"detector": "w.pt"})
+    assert cmd[cmd.index("--img-size") + 1] == str(trk["track_args"]["imgsz"]) == "1280"
+    assert cmd[cmd.index("--conf-thres") + 1] == str(trk["track_args"]["conf"]) == "0.01"
+    assert trk["first_frame_dir"]  # BSB protocol on in the controlled setting
+
+
+def test_author_recipes_stay_unchanged(tmp_path):
+    ov = [f"paths.baselines_dir={tmp_path}"]
+    sb = get_adapter(load_config("strong_baseline_bsb", ov), {"root": str(tmp_path / "d")})
+    dist = get_adapter(load_config("dist_tracker_bsb", ov), {"root": str(tmp_path / "d")})
+    assert "--conf-thres" not in sb.track_command({"detector": "w.pt"}, Path("/o"))  # script default 0.09
+    assert dist.detector_job()["model"] == "./cfg/models/12/yolo12-UAV.yaml"  # scale 's'
+    assert (dist.detector_job()["train_args"]["imgsz"], dist.track_job({"detector": "w"})["track_args"]["conf"]) == (640, 0.0)

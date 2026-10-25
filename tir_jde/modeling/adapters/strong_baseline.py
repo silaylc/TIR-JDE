@@ -104,13 +104,15 @@ class StrongBaselineAdapter(Adapter):
             self.python, "tools/predict_track3.py",
             "--weights", weights["detector"],
             "--source", str(self.data_root / "track" / "val") + "/",
-            "--img-size", str(trk["img_size"]),
+            "--img-size", str(trk["imgsz"]),
             "--track_buffer", str(trk["track_buffer"]),
             "--device", "0",
             "--save_path_answer", str(out_dir),
             "--project", str(self.run_dir / "track_frames"),
             "--hide-labels-name", "--nosave",
         ]
+        if trk.get("conf") is not None:  # otherwise the script's own default (author recipe)
+            cmd += ["--conf-thres", str(trk["conf"])]
         if trk.get("agnostic_nms", True):
             cmd.append("--agnostic-nms")
         if weights.get("reid") and self.model_cfg.get("reid", {}).get("enabled", True):
