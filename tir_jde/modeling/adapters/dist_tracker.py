@@ -23,9 +23,9 @@ class DistTrackerAdapter(Adapter):
             "mode": "train",
             "lib_root": str(self.repo_dir),
             "cwd": str(self.repo_dir / "ultralytics"),
-            "model": det["cfg"],
+            "model": self.init_weights() or det["cfg"],
             "train_args": {
-                "data": str(self.data_root / "yolo" / "dataset.yaml"),
+                "data": str(self.detector_data_yaml()),
                 "task": "detect",
                 "epochs": det["epochs"],
                 "batch": det["batch"],
@@ -36,14 +36,12 @@ class DistTrackerAdapter(Adapter):
                 "project": str(self.run_dir / "detector"),
                 "name": "train",
                 "exist_ok": True,
+                # the authors' train.py leaves workers at the Ultralytics default; set only when configured
+                **({"workers": self.workers()} if "workers" in det else {}),
                 # extra Ultralytics arguments, only for short checks (e.g. the smoke test)
                 **(det.get("extra") or {}),
             },
         }
-
-    def train(self) -> dict[str, str]:
-        result = self._run_job(self.detector_job(), "train_detector")
-        return {"detector": result["best"], "detector_results": f"{result['save_dir']}/results.csv"}
 
     def track_job(self, weights: dict[str, str]) -> dict:
         trk = self.model_cfg["tracker"]

@@ -30,10 +30,7 @@ class StrongBaselineAdapter(Adapter):
     # ------------------------------------------------------------------ train
     def _model_spec(self) -> str:
         det = self.model_cfg["detector"]
-        init = det.get("init", "scratch")
-        if init == "scratch":
-            return f"ultralytics/cfg/models/v12/{det['arch']}.yaml"
-        return str(init)
+        return self.init_weights() or f"ultralytics/cfg/models/v12/{det['arch']}.yaml"
 
     def detector_job(self) -> dict:
         det = self.model_cfg["detector"]
@@ -43,13 +40,13 @@ class StrongBaselineAdapter(Adapter):
             "cwd": str(self.yolo_dir),
             "model": self._model_spec(),
             "train_args": {
-                "data": str(self.data_root / "yolo" / "dataset.yaml"),
+                "data": str(self.detector_data_yaml()),
                 "epochs": det["epochs"],
                 "patience": det["epochs"],      # as in the authors' train.py (patience = epochs)
                 "batch": det["batch"],
                 "imgsz": det["imgsz"],
                 "device": 0,
-                "workers": det.get("workers", 8),
+                "workers": self.workers(),
                 "single_cls": True,
                 "seed": self.cfg.get("seed", 0),
                 "deterministic": True,
@@ -75,10 +72,7 @@ class StrongBaselineAdapter(Adapter):
         return cfg_file
 
     def train(self) -> dict[str, str]:
-        weights: dict[str, str] = {}
-        result = self._run_job(self.detector_job(), "train_detector")
-        weights["detector"] = result["best"]
-        weights["detector_results"] = str(Path(result["save_dir"]) / "results.csv")
+        weights = self.train_detector()
 
         reid = self.model_cfg.get("reid", {})
         if reid.get("enabled", True) and not reid.get("weights"):

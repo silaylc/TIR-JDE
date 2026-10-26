@@ -1,0 +1,47 @@
+# Ortak dedektör: başlık tablosundaki üç yöntem (SB, Dist-Tracker, TIR-JDE) bu tek dedektörün tespitlerini kullanır;
+# yöntemler yalnızca tracker'da ayrışır. Strong Baseline fork'unda (YOLOv12-turbo, Ultralytics 8.3.63) eğitilir.
+# Başlangıç: SB'nin SOT ağırlığı (YOLOv12-L, 640) -> BSB'de sekans bazlı ince ayar. Kararlar: docs/pilot.md
+model:
+  detector:
+    arch: yolov12l
+    init: sot
+    epochs: 30                  # GEÇİCİ: pilot eğrisi ve bütçeye göre kesinleşecek
+    batch: 16
+    imgsz: 640                  # SOT ağırlığının çözünürlüğü; 1280 yalnızca tek tohumlu duyarlılık deneyi
+    workers: auto
+    frame_step: 1
+    val_frame_step: 1
+    extra:                      # Ultralytics train() argümanları; fork varsayılanlarına güvenilmez, açıkça yazılır
+      single_cls: true
+      multi_scale: false
+      amp: true                 # Dist nan kontrolüne bağlı değil: dedektör artık ortak, standart kayıp
+      optimizer: SGD            # Ultralytics SGD'yi nesterov=True ile kurar
+      lr0: 0.003                # ince ayar: düşük lr (pilotta 0.002 / 0.005 denenir)
+      lrf: 0.01
+      momentum: 0.937
+      weight_decay: 0.0005
+      nbs: 64
+      warmup_epochs: 1.0        # kısa ısınma
+      warmup_bias_lr: 0.0       # ince ayarda tek sınıflı başlık hazır; 0.1'lik bias lr'si (lr0'ın 33 katı) onu bozabilir
+      mosaic: 1.0
+      close_mosaic: 10
+      scale: 0.5                # pilotta 0.25 denenir
+      translate: 0.1
+      fliplr: 0.5
+      flipud: 0.0
+      degrees: 0.0
+      shear: 0.0
+      perspective: 0.0
+      hsv_h: 0.0                # termal gri görüntüde etkisiz
+      hsv_s: 0.0
+      hsv_v: 0.4
+      mixup: 0.0
+      copy_paste: 0.0           # SB fork varsayılanı 0.1
+      box: 7.5
+      cls: 0.5
+      dfl: 1.5
+      conf: 0.01                # doğrulama eşiği
+      iou: 0.7
+      max_det: 300
+  reid:
+    enabled: false              # dedektör eğitimi; SB'nin ReID'i tracker adımında ayrı eğitilir

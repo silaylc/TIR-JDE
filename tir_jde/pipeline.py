@@ -9,6 +9,9 @@ Usage (every command takes an experiment config plus optional key=value override
     python -m tir_jde.pipeline run        dist_tracker_bsb seed=0 model.detector.epochs=2 tag=smoke
     python -m tir_jde.pipeline compare    strong_baseline_bsb dist_tracker_bsb --seeds 0 1 2
     python -m tir_jde.pipeline make-val   strong_baseline_bsb --fraction 0.15
+    python -m tir_jde.pipeline eval-detector  common_detector_bsb tag=zeroshot
+    python -m tir_jde.pipeline train-detector common_detector_bsb_pilot seed=0 tag=R0a
+    python -m tir_jde.pipeline pilot-report   common_detector_bsb_pilot
 
 Each experiment + seed (+ tag) is one MLflow run; every stage logs into it.
 """
@@ -120,7 +123,118 @@ class _LiveTrainLog:
             print(f"[mlflow] log yüklenemedi: {e}", flush=True)
 
 
-def stage_train(cfg: dict) -> dict:
+class _GpuMonitor:
+    """Samples GPU memory and utilisation with nvidia-smi while a model trains.
+
+    Writes ``logs/gpu.csv``, sends the samples to MLflow once a minute and returns
+    peak memory and mean utilisation at the end. Without nvidia-smi it does nothing."""
+
+    QUERY = ("nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu",
+             "--format=csv,noheader,nounits")
+
+    def __init__(self, logs_dir: Path, run_id: str | None, every: float = 15.0, push_every: float = 60.0):
+        self.file = logs_dir / "gpu.csv"
+        self.run_id, self.every, self.push_every = run_id, every, push_every
+        self.samples: list[tuple[float, float, float, float]] = []  # seconds, used MiB, total MiB, util %
+        self._pushed = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._t0 = time.monotonic()
+
+    def start(self) -> None:
+        import shutil
+
+        if shutil.which("nvidia-smi"):
+            self.file.write_text("seconds,memory_used_mib,memory_total_mib,utilization_pct\n")
+            self._thread.start()
+
+    def _sample(self) -> None:
+        import subprocess
+
+        out = subprocess.run(self.QUERY, capture_output=True, text=True, timeout=20, check=False).stdout.strip()
+        if not out:
+            return
+        used, total, util = (float(v) for v in out.splitlines()[0].split(","))
+        row = (round(time.monotonic() - self._t0, 1), used, total, util)
+        self.samples.append(row)
+        with open(self.file, "a") as f:
+            f.write(",".join(str(v) for v in row) + "\n")
+
+    def _push(self) -> None:
+        if not self.run_id or self._pushed >= len(self.samples):
+            return
+        from mlflow.entities import Metric
+        from mlflow.tracking import MlflowClient
+
+        now = int(time.time() * 1000)
+        new = self.samples[self._pushed:]
+        MlflowClient().log_batch(self.run_id, metrics=[
+            m for sec, used, _, util in new
+            for m in (Metric("gpu.memory_used_mib", used, now, int(sec)),
+                      Metric("gpu.utilization_pct", util, now, int(sec)))])
+        self._pushed = len(self.samples)
+
+    def _loop(self) -> None:
+        last_push = time.monotonic()
+        while not self._stop.wait(self.every):
+            try:
+                self._sample()
+                if time.monotonic() - last_push >= self.push_every:
+                    last_push = time.monotonic()
+                    self._push()
+            except Exception as e:  # noqa: BLE001 - monitoring must never stop training
+                print(f"[gpu] örnek atlandı: {e}", flush=True)
+
+    def stop(self) -> dict[str, float]:
+        self._stop.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=30)
+        try:
+            self._push()
+        except Exception as e:  # noqa: BLE001
+            print(f"[gpu] MLflow'a gönderilemedi: {e}", flush=True)
+        if not self.samples:
+            return {}
+        used = [s[1] for s in self.samples]
+        util = [s[3] for s in self.samples]
+        return {"gpu.memory_peak_mib": max(used), "gpu.memory_total_mib": self.samples[0][2],
+                "gpu.utilization_mean_pct": float(np.mean(util)),
+                "gpu.utilization_median_pct": float(np.median(util))}
+
+
+def _log_detector_extras(mlflow, weights: dict, run_dir_: Path) -> None:
+    """Frame selection (steps, counts, hashes, lists) and the full-validation metrics."""
+    frames_file = Path(weights.get("detector_frames", ""))
+    if frames_file.is_file():
+        frames = json.loads(frames_file.read_text())
+        mlflow.set_tags({f"data.{part}_frames_hash": v["hash"] for part, v in frames.items()})
+        mlflow.log_metrics({f"data.{part}_{k}": float(v[k]) for part, v in frames.items() for k in ("step", "frames")})
+        mlflow.log_artifact(str(frames_file), artifact_path="data")
+        lists = run_dir_ / "detector_data"
+        if lists.is_dir():
+            mlflow.log_artifacts(str(lists), artifact_path="data/frame_lists")
+        per_epoch = frames["train"].get("iterations_per_epoch")
+        results = Path(weights.get("detector_results", ""))
+        if per_epoch and results.is_file():
+            from tir_jde.modeling.adapters.base import Adapter
+
+            secs = [m["epoch_seconds"] for _, m in Adapter.epoch_metrics(results) if "epoch_seconds" in m]
+            if secs:
+                mlflow.log_metrics({"train.iterations_per_epoch": float(per_epoch),
+                                    "train.seconds_per_iteration": float(np.mean(secs)) / per_epoch})
+    val_file = Path(weights.get("detector_val_full", ""))
+    if val_file.is_file():
+        val = json.loads(val_file.read_text())
+        mlflow.log_metrics({f"det_val_full.{_metric_name(k)}": v for k, v in val["metrics"].items()})
+
+
+def _metric_name(key: str) -> str:
+    return key.replace("(", "_").replace(")", "").replace("/", ".")
+
+
+def stage_train(cfg: dict, detector_only: bool = False) -> dict:
+    """Trains the model (detector + ReID where the model has one); ``detector_only``
+    stops after the detector (pilot runs)."""
     from tir_jde.modeling.adapters import get_adapter
     from tir_jde.tracking import log_environment, mlflow_run
 
@@ -133,13 +247,22 @@ def stage_train(cfg: dict) -> dict:
         mlflow.log_dict(manifest["sequences"], "data/sequences.json")
         log_environment(mlflow, cfg["model"]["name"], adapter.python)
 
-        live = _LiveTrainLog(adapter, mlflow.active_run().info.run_id)
+        run_id = mlflow.active_run().info.run_id
+        live = _LiveTrainLog(adapter, run_id)
+        gpu = _GpuMonitor(adapter.logs_dir, run_id)
         live.start()
+        gpu.start()
         try:
-            weights = adapter.train()
+            weights = adapter.train_detector() if detector_only else adapter.train()
         finally:
             live.stop()
+            gpu_summary = gpu.stop()
+        if gpu_summary:
+            mlflow.log_metrics(gpu_summary)
+            (adapter.run_dir / "gpu_summary.json").write_text(json.dumps(gpu_summary, indent=2))
+            mlflow.log_artifact(str(gpu.file), artifact_path="logs")
         (adapter.run_dir / "weights.json").write_text(json.dumps(weights, indent=2))
+        _log_detector_extras(mlflow, weights, adapter.run_dir)
 
         for epoch, metrics in adapter.epoch_metrics(Path(weights.get("detector_results", ""))):
             if epoch not in live.logged_epochs:
@@ -257,6 +380,92 @@ def stage_compare(experiments: list[str], seeds: list[int], overrides: list[str]
     return csv_file
 
 
+def stage_eval_detector(cfg: dict) -> dict:
+    """Zero-shot check: the starting weights (``detector.init``) on every val frame, no training."""
+    from tir_jde.modeling.adapters import get_adapter
+    from tir_jde.tracking import mlflow_run
+
+    manifest = dataset.prepare(cfg)
+    adapter = get_adapter(cfg, manifest)
+    commit = adapter.ensure_repo()
+    with mlflow_run(cfg, "eval_detector") as mlflow:
+        mlflow.set_tags({"baseline.commit": commit, "data.split_hash": manifest["split_hash"]})
+        result = adapter.evaluate_init_weights()
+        mlflow.set_tag("detector.init_weights", Path(result["weights"]).name)
+        mlflow.log_metrics({f"det_val_zero_shot.{_metric_name(k)}": v for k, v in result["metrics"].items()})
+    print(json.dumps(result["metrics"], indent=2))
+    return result
+
+
+def stage_pilot_report(cfg: dict, baseline: str = "R0a", noise_pair: tuple[str, str] = ("R0a", "R0b"),
+                       metrics: tuple[str, ...] = ("mAP50", "recall")) -> Path:
+    """Table of the detector pilot runs and the decision rule.
+
+    Noise floor = |a - b| for the two runs of noise_pair (same settings, another seed).
+    A run's setting is adopted when it beats baseline (the defaults with the chosen
+    starting weights) by more than twice the noise floor on the first metric (mAP50);
+    recall is reported next to it. Two seeds give only a rough noise estimate, which the
+    report states."""
+    base = Path(cfg["paths"]["work_dir"]) / "runs"
+    prefix = f"{cfg['name']}-s"
+    runs: dict[str, dict] = {}
+    for d in sorted(base.glob(f"{prefix}*-*")):
+        seed_tag = d.name[len(prefix):]
+        seed, _, tag = seed_tag.partition("-")
+        val_file = d / "detector_val_full.json"
+        if not tag or not val_file.exists():
+            continue
+        val = json.loads(val_file.read_text())["metrics"]
+        row = {"seed": int(seed),
+               **{m: next((v for k, v in val.items() if k.endswith(f"/{m}(B)")), np.nan) for m in metrics}}
+        res = d / "detector" / "train" / "results.csv"
+        if res.exists():
+            from tir_jde.modeling.adapters.base import Adapter
+            secs = [m.get("epoch_seconds") for _, m in Adapter.epoch_metrics(res) if "epoch_seconds" in m]
+            row["epoch_min"] = float(np.mean(secs)) / 60 if secs else np.nan
+            fr = d / "detector_frames.json"
+            per_epoch = json.loads(fr.read_text())["train"].get("iterations_per_epoch") if fr.exists() else None
+            row["s_per_it"] = float(np.mean(secs)) / per_epoch if secs and per_epoch else np.nan
+        gpu_file = d / "gpu_summary.json"
+        if gpu_file.exists():
+            g = json.loads(gpu_file.read_text())
+            row["gpu_peak_gib"] = g.get("gpu.memory_peak_mib", np.nan) / 1024
+            row["gpu_util_pct"] = g.get("gpu.utilization_mean_pct", np.nan)
+        runs[tag] = row
+    if not runs:
+        print(f"[pilot-report] {base} altında tamamlanmış pilot koşusu yok ({prefix}<tohum>-<etiket>)")
+        return base
+
+    lines = [f"# Dedektör pilotu: {cfg['name']}", ""]
+    first = metrics[0]
+    a, b = noise_pair
+    noise = abs(runs[a][first] - runs[b][first]) if {a, b} <= set(runs) else np.nan
+    cols = ["seed", *metrics, f"Δ{first}", "karar", "epoch_min", "s_per_it", "gpu_peak_gib", "gpu_util_pct"]
+    lines.append("| koşu | " + " | ".join(cols) + " |")
+    lines.append("|" + "---|" * (len(cols) + 1))
+    for tag, r in runs.items():
+        delta = r[first] - runs[baseline][first] if baseline in runs else np.nan
+        if tag == baseline:
+            decision = "referans"
+        elif tag in noise_pair:
+            decision = "gürültü"
+        elif np.isfinite(noise) and np.isfinite(delta):
+            decision = "benimse" if delta > 2 * noise else "varsayılan kalır"
+        else:
+            decision = "?"
+        cells = [r["seed"], *[r.get(m, np.nan) for m in metrics], delta, decision,
+                 r.get("epoch_min", np.nan), r.get("s_per_it", np.nan), r.get("gpu_peak_gib", np.nan),
+                 r.get("gpu_util_pct", np.nan)]
+        lines.append(f"| {tag} | " + " | ".join(f"{c:.4f}" if isinstance(c, float) else str(c) for c in cells) + " |")
+    lines += ["", (f"Referans: {baseline}. Gürültü tabanı |{a} − {b}| ({first}) = {noise:.4f}; "
+                   f"eşik 2× = {2 * noise:.4f}."),
+              "Gürültü yalnızca iki tohumla tahmin edildi; eşik kaba bir eşiktir."]
+    out = base / f"{cfg['name']}-pilot_report.md"
+    out.write_text("\n".join(lines) + "\n")
+    print(out.read_text())
+    return out
+
+
 def stage_make_val(cfg: dict, per_family: int, seed: int, force: bool,
                    fraction: float | None = None) -> Path:
     data_cfg = cfg["data"]
@@ -292,10 +501,14 @@ def _write_per_sequence_csv(per_sequence: dict, path: Path) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m tir_jde.pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("preprocess", "train", "evaluate", "visualize", "run"):
+    for name in ("preprocess", "train", "train-detector", "eval-detector", "evaluate", "visualize", "run",
+                 "pilot-report"):
         p = sub.add_parser(name)
         p.add_argument("experiment")
         p.add_argument("overrides", nargs="*")
+        if name == "pilot-report":
+            p.add_argument("--baseline", default="R0a", help="reference run (defaults, chosen weights)")
+            p.add_argument("--noise", nargs=2, default=["R0a", "R0b"], help="two seeds of the same settings")
         if name in ("visualize", "run"):
             p.add_argument("--sequences", nargs="*")
     p = sub.add_parser("compare")
@@ -322,6 +535,12 @@ def main(argv: list[str] | None = None) -> None:
         stage_preprocess(cfg)
     elif args.command == "train":
         stage_train(cfg)
+    elif args.command == "train-detector":
+        stage_train(cfg, detector_only=True)
+    elif args.command == "eval-detector":
+        stage_eval_detector(cfg)
+    elif args.command == "pilot-report":
+        stage_pilot_report(cfg, args.baseline, tuple(args.noise))
     elif args.command == "evaluate":
         stage_evaluate(cfg)
     elif args.command == "visualize":

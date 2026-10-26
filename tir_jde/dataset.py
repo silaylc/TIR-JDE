@@ -255,6 +255,28 @@ def export_yolo(seqs: list[str], part: str, data_cfg: dict, frames_dir: Path, ou
     return n_images
 
 
+def select_frames(images: list[Path], step: int) -> list[Path]:
+    """Every ``step``-th frame of each sequence, starting with frame 1.
+
+    YOLO image names are ``<seq>_<frame:05d>``; the frame number decides, so the
+    selection does not depend on the listing order and is the same on every machine.
+    """
+    if step <= 1:
+        return sorted(images)
+    keep = []
+    for img in sorted(images):
+        frame = int(img.stem.rsplit("_", 1)[1])
+        if (frame - 1) % step == 0:
+            keep.append(img)
+    return keep
+
+
+def frames_hash(images: list[Path]) -> str:
+    """Identifies a frame selection by its image names (not the folder it sits in)."""
+    names = "\n".join(sorted(p.name for p in images))
+    return hashlib.sha256(names.encode()).hexdigest()[:12]
+
+
 def reid_crop_name(gid: int, seq: str, frame: int) -> str:
     """File name parsed by FastReID's MOT20 loader in Strong Baseline.
 

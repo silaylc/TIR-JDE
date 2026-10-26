@@ -91,3 +91,46 @@ def test_compare_aggregates_seeds(oracle_cfg, tmp_path, monkeypatch):
     text = out.read_text()
     assert "0.6000 ± 0.1000" in text  # HOTA mean ± std
     assert (tmp_path / "cmp" / "comparison.png").exists()
+
+
+class DetectorOnlyAdapter(OracleAdapter):
+    """train-detector must call train_detector() only and log the frame selection."""
+
+    def train(self):
+        raise AssertionError("ReID must not train in a detector-only run")
+
+    def train_detector(self):
+        weights = OracleAdapter.train(self)
+        frames = self.run_dir / "detector_frames.json"
+        frames.write_text(json.dumps({"train": {"step": 2, "frames": 5, "of": 10, "hash": "abc123"},
+                                      "val": {"step": 10, "frames": 1, "of": 10, "hash": "def456"}}))
+        val = self.run_dir / "detector_val_full.json"
+        val.write_text(json.dumps({"metrics": {"metrics/mAP50(B)": 0.5, "metrics/recall(B)": 0.7}}))
+        return {**weights, "detector_frames": str(frames), "detector_val_full": str(val)}
+
+
+def test_detector_only_training_logs_frames_and_full_validation(oracle_cfg, monkeypatch):
+    monkeypatch.setitem(adapters.ADAPTERS, "oracle", DetectorOnlyAdapter)
+    pipeline.stage_train(oracle_cfg, detector_only=True)
+
+    mlflow.set_tracking_uri(tracking.tracking_uri(oracle_cfg))
+    run = mlflow.search_runs(experiment_names=[oracle_cfg["tracking"]["experiment"]]).iloc[0]
+    assert run["tags.data.train_frames_hash"] == "abc123"
+    assert run["metrics.data.train_step"] == 2
+    assert run["metrics.det_val_full.metrics.mAP50_B"] == pytest.approx(0.5)
+    assert run["metrics.det_val_full.metrics.recall_B"] == pytest.approx(0.7)
+
+
+class ZeroShotAdapter(OracleAdapter):
+    def evaluate_init_weights(self):
+        return {"weights": "/w/SOT_yolov12l.pt", "metrics": {"metrics/mAP50(B)": 0.42}}
+
+
+def test_zero_shot_check_logs_the_starting_weights(oracle_cfg, monkeypatch):
+    monkeypatch.setitem(adapters.ADAPTERS, "oracle", ZeroShotAdapter)
+    pipeline.stage_eval_detector({**oracle_cfg, "tag": "zeroshot"})
+
+    mlflow.set_tracking_uri(tracking.tracking_uri(oracle_cfg))
+    run = mlflow.search_runs(experiment_names=[oracle_cfg["tracking"]["experiment"]]).iloc[0]
+    assert run["metrics.det_val_zero_shot.metrics.mAP50_B"] == pytest.approx(0.42)
+    assert run["tags.detector.init_weights"] == "SOT_yolov12l.pt"

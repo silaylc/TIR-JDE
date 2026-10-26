@@ -302,8 +302,8 @@ def test_dist_tracker_first_frame_switch(tmp_path):
     assert job("model.tracker.first_frame_gt=true")["first_frame_dir"].endswith("track/val/TestLabels_FirstFrameOnly")
 
 
-SHARED_TRAIN_ARGS = ("epochs", "batch", "imgsz", "multi_scale", "single_cls", "amp", "optimizer",
-                     "warmup_bias_lr", "copy_paste", "close_mosaic", "seed", "deterministic")
+SHARED_TRAIN_ARGS = ("epochs", "batch", "imgsz", "multi_scale", "single_cls", "amp", "optimizer", "lr0", "nbs",
+                     "warmup_bias_lr", "copy_paste", "close_mosaic", "seed", "deterministic", "workers", "data")
 
 
 def test_controlled_experiments_train_and_track_with_the_same_settings(tmp_path):
@@ -313,6 +313,7 @@ def test_controlled_experiments_train_and_track_with_the_same_settings(tmp_path)
     a, b = sb.detector_job()["train_args"], dist.detector_job()["train_args"]
     assert {k: a[k] for k in SHARED_TRAIN_ARGS} == {k: b[k] for k in SHARED_TRAIN_ARGS}
     assert (a["imgsz"], a["multi_scale"], a["copy_paste"]) == (1280, False, 0.0)
+    assert (a["optimizer"], a["lr0"], a["nbs"]) == ("SGD", 0.01, 64)
     assert sb.detector_job()["model"].endswith("yolov12n.yaml") and dist.detector_job()["model"] == "yolo12n.yaml"
 
     cmd = sb.track_command({"detector": "w.pt", "reid": "r.pth"}, Path("/o"))

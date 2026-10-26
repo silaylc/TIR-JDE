@@ -6,6 +6,10 @@ model:
   python: ${DIST_PYTHON:-python}  # Dist-Tracker ortamının python'u (Python 3.8, torch 2.4.1)
   detector:
     cfg: ./cfg/models/12/yolo12-UAV.yaml
+    init: scratch                 # scratch | coco | <.pt yolu>
+    pretrained:
+      coco:
+        url: https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12n.pt  # Ultralytics YOLO12n
     epochs: 50                    # yazarın train.py değerleri
     batch: 16
     imgsz: 640

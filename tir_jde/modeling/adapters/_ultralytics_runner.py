@@ -7,6 +7,7 @@ pip-installed ``ultralytics`` can never silently replace the authors' fork.
 
 Modes:
 - ``train``: ``YOLO(model).train(**train_args)``; prints the save directory.
+- ``val``: ``YOLO(weights).val(...)``; returns the detection metrics.
 - ``track``: ``YOLO(weights).track(...)`` on every sequence folder, writes one
   MOTChallenge file per sequence and the end-to-end frames-per-second.
   With ``first_frame_dir`` (BSB protocol), the detections of each sequence's
@@ -121,10 +122,18 @@ def _track(job: dict) -> dict:
             "fps": n_frames / seconds if seconds else 0.0}
 
 
+def _val(job: dict) -> dict:
+    """``YOLO(weights).val(**val_args)``: precision, recall, mAP50, mAP50-95 on every val frame."""
+    YOLO = _import_fork(job["lib_root"])
+    metrics = YOLO(job["weights"]).val(**job["val_args"])
+    return {"metrics": {k: float(v) for k, v in metrics.results_dict.items()},
+            "speed_ms": {k: float(v) for k, v in getattr(metrics, "speed", {}).items()}}
+
+
 def main() -> None:
     job = json.loads(Path(sys.argv[1]).read_text())
     os.chdir(job.get("cwd", os.getcwd()))
-    result = {"train": _train, "track": _track}[job["mode"]](job)
+    result = {"train": _train, "track": _track, "val": _val}[job["mode"]](job)
     Path(job["result_file"]).write_text(json.dumps(result))
 
 

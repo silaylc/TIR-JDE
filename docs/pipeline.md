@@ -24,9 +24,13 @@ python -m tir_jde.pipeline preprocess strong_baseline_bsb
 python -m tir_jde.pipeline run        dist_tracker_bsb seed=0               # train + evaluate + visualize
 python -m tir_jde.pipeline run        strong_baseline_bsb seed=0 tag=smoke model.detector.epochs=1
 python -m tir_jde.pipeline compare    strong_baseline_bsb dist_tracker_bsb --seeds 0 1 2
+python -m tir_jde.pipeline eval-detector  common_detector_bsb tag=zeroshot          # başlangıç ağırlığı, eğitimsiz
+python -m tir_jde.pipeline train-detector common_detector_bsb_pilot seed=0 tag=R0a  # yalnızca dedektör
+python -m tir_jde.pipeline pilot-report   common_detector_bsb_pilot
 ```
 
 Colab'da baştan sona: [`notebooks/colab_pipeline.ipynb`](../notebooks/colab_pipeline.ipynb).
+Ortak dedektör, pilotu ve karar kuralı: [`pilot.md`](pilot.md).
 
 ## Adımlar
 

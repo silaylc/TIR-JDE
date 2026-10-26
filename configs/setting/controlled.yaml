@@ -6,11 +6,16 @@ model:
     epochs: 50                  # GEÇİCİ: SB 10 epoch süre ölçümünden sonra kesinleşecek
     batch: 16                   # 1280'de iki modelde de sığan değer; nbs=64 ile etkin batch 64
     imgsz: 1280                 # eğitim = çıkarım çözünürlüğü
+    workers: auto               # makinenin işlemci sayısı (Ultralytics kendi üst sınırını uygular)
+    frame_step: 1               # her k. kare ile eğitim (1 = bütün kareler)
+    val_frame_step: 1           # eğitim sırasındaki doğrulamada her k. kare; >1 ise sonunda tam val
     extra:                      # Ultralytics train() argümanları, iki modelde aynı
       multi_scale: false        # SB: false, Dist: true -> false
       single_cls: true
       amp: true                 # Dist nan ön kontrolüne göre kesinleşecek
-      optimizer: auto
+      optimizer: SGD            # 'auto' büyük veride zaten SGD 0.01 seçer; açıkça yazılır
+      lr0: 0.01
+      nbs: 64                   # nominal batch: batch 16'da 4 adım gradyan biriktirilir
       warmup_bias_lr: 0.1       # SB: 0.0, Dist: 0.1 -> Ultralytics varsayılanı 0.1
       copy_paste: 0.0           # SB: 0.1, Dist: 0.0 -> Ultralytics varsayılanı 0.0
       close_mosaic: 10

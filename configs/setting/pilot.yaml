@@ -1,0 +1,9 @@
+# Dedektör pilotu (docs/pilot.md): ortak dedektör ayarlarının üstüne kısa ve seyreltilmiş koşular.
+# Yalnızca dedektör eğitilir (python -m tir_jde.pipeline train-detector ...).
+model:
+  detector:
+    epochs: 10
+    frame_step: 2               # her 2. kare; seçilen liste ve hash'i run klasörüne ve MLflow'a yazılır
+    val_frame_step: 10          # epoch sonlarında val'in her 10. karesi; eğitimden sonra tam val
+    extra:
+      close_mosaic: 2           # 10 epoch'un son 2'si (ana koşudaki 10/30 oranına yakın)

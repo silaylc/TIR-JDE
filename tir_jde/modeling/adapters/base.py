@@ -26,6 +26,16 @@ from tir_jde.experiment import run_dir
 
 RUNNER = Path(__file__).with_name("_ultralytics_runner.py")
 
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
 # Console output is throttled so long trainings do not flood (and crash) the
 # notebook page; the full output always goes to logs/<name>.log.
 PROGRESS_RE = re.compile(r"\d+%\|.*\||\d+/\d+ \[\d")       # tqdm-style progress bars
@@ -161,9 +171,138 @@ class Adapter:
         self._run([self.python, str(RUNNER), str(job_file)], log_name)
         return json.loads(Path(job["result_file"]).read_text())
 
+    # ------------------------------------------------------------------ detector
+    def frame_steps(self) -> dict[str, int]:
+        det = self.model_cfg["detector"]
+        return {"train": int(det.get("frame_step") or 1), "val": int(det.get("val_frame_step") or 1)}
+
+    def detector_data_yaml(self) -> Path:
+        """Dataset file the detector trains on: the full one from preprocessing, or the
+        run's own frame lists when ``frame_step`` / ``val_frame_step`` thin out frames."""
+        if self.frame_steps() == {"train": 1, "val": 1}:
+            return self.data_root / "yolo" / "dataset.yaml"
+        return self.run_dir / "detector_data" / "dataset.yaml"
+
+    def write_detector_data(self) -> dict:
+        """Writes the frame lists (absolute image paths) and returns steps, counts and hashes.
+
+        The lists stay in the run folder and go to MLflow, so the exact frames are known."""
+        from tir_jde.dataset import frames_hash, select_frames
+
+        yolo = self.data_root / "yolo"
+        steps = self.frame_steps()
+        info: dict = {}
+        out = self.detector_data_yaml().parent
+        for part, step in steps.items():
+            images = [p for p in (yolo / part / "images").iterdir() if not p.name.startswith(".")]
+            chosen = select_frames(images, step)
+            info[part] = {"step": step, "frames": len(chosen), "of": len(images), "hash": frames_hash(chosen)}
+            if out != yolo:
+                out.mkdir(parents=True, exist_ok=True)
+                (out / f"{part}.txt").write_text("".join(f"{p}\n" for p in chosen))
+        det = self.model_cfg["detector"]
+        fraction = float((det.get("extra") or {}).get("fraction", 1.0))
+        used = round(info["train"]["frames"] * fraction)
+        info["train"]["iterations_per_epoch"] = math.ceil(used / det["batch"])  # batch başına bir iterasyon
+        if out != yolo:
+            (out / "dataset.yaml").write_text(
+                f"path: {out}\ntrain: {out / 'train.txt'}\nval: {out / 'val.txt'}\nnc: 1\nnames: ['uav']\n")
+        (self.run_dir / "detector_frames.json").write_text(json.dumps(info, indent=2))
+        return info
+
+    def init_weights(self) -> str | None:
+        """Starting weights of the detector (``detector.init``).
+
+        ``scratch`` -> None (architecture yaml); a key of ``detector.pretrained`` (e.g. ``coco``,
+        ``sot``) -> that checkpoint, downloaded once and checked against its SHA-256 when one is
+        given; anything else -> that file path."""
+        det = self.model_cfg["detector"]
+        init = det.get("init", "scratch")
+        if init in (None, "scratch"):
+            return None
+        entry = (det.get("pretrained") or {}).get(init)
+        if entry is None:
+            return str(init)
+        arch = det.get("arch")
+        if entry.get("arch") and arch and entry["arch"] != arch:
+            raise ValueError(f"'{init}' ağırlığı {entry['arch']} mimarisi için; config'te arch={arch}")
+        url = entry["url"].format(arch=arch)
+        dest = Path(self.cfg["paths"]["baselines_dir"]) / "weights" / f"{self.name}_{init}_{Path(url).name}"
+        if not dest.exists():
+            import urllib.request
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dest.with_suffix(".part")
+            print(f"[init] '{init}' ağırlığı indiriliyor: {url}", flush=True)
+            urllib.request.urlretrieve(url, tmp)
+            tmp.rename(dest)
+        expected = entry.get("sha256")
+        if expected:
+            actual = _sha256(dest)
+            if actual != expected:
+                raise RuntimeError(f"{dest} SHA-256 uyuşmuyor: {actual} != {expected} (dosyayı silip yeniden indirin)")
+        return str(dest)
+
+    def workers(self, default: int = 8) -> int:
+        """``detector.workers``: a number, or ``auto`` = the machine's CPU count."""
+        w = self.model_cfg["detector"].get("workers", default)
+        if w in (None, "auto"):
+            return os.cpu_count() or default
+        return int(w)
+
+    def detector_val_job(self, weights: str) -> dict:
+        """Full-validation job (every frame) for a trained detector."""
+        det = self.model_cfg["detector"]
+        extra = det.get("extra") or {}
+        return {
+            "mode": "val",
+            "lib_root": self.detector_job()["lib_root"],
+            "cwd": self.detector_job()["cwd"],
+            "weights": weights,
+            "val_args": {
+                "data": str(self.data_root / "yolo" / "dataset.yaml"),
+                "split": "val",
+                "imgsz": det["imgsz"],
+                "batch": det["batch"],
+                "conf": extra.get("conf", 0.001),
+                "single_cls": True,
+                "device": 0,
+                "workers": self.workers(),
+                "project": str(self.run_dir / "detector"),
+                "name": "val_full",
+                "exist_ok": True,
+            },
+        }
+
+    def detector_job(self) -> dict:
+        raise NotImplementedError
+
+    def train_detector(self) -> dict[str, str]:
+        """Trains the detector; with thinned validation frames, validates on every frame afterwards."""
+        frames = self.write_detector_data()
+        result = self._run_job(self.detector_job(), "train_detector")
+        weights = {"detector": result["best"], "detector_results": str(Path(result["save_dir"]) / "results.csv"),
+                   "detector_frames": str(self.run_dir / "detector_frames.json")}
+        if frames["val"]["step"] > 1:
+            val = self._run_job(self.detector_val_job(result["best"]), "val_detector")
+            out = self.run_dir / "detector_val_full.json"
+            out.write_text(json.dumps(val, indent=2))
+            weights["detector_val_full"] = str(out)
+        return weights
+
+    def evaluate_init_weights(self) -> dict:
+        """Validates the starting weights on every val frame without training (zero-shot)."""
+        weights = self.init_weights()
+        if weights is None:
+            raise ValueError("detector.init=scratch: değerlendirilecek başlangıç ağırlığı yok")
+        result = self._run_job(self.detector_val_job(weights), "val_zero_shot")
+        result["weights"] = weights
+        (self.run_dir / "detector_val_zero_shot.json").write_text(json.dumps(result, indent=2))
+        return result
+
     # ------------------------------------------------------------------ interface
     def train(self) -> dict[str, str]:
-        raise NotImplementedError
+        return self.train_detector()
 
     def track(self, weights: dict[str, str]) -> dict:
         raise NotImplementedError
@@ -175,6 +314,7 @@ class Adapter:
         if not results_csv.exists():
             return []
         rows = []
+        previous_time = 0.0
         with open(results_csv, encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 row = {k.strip(): v for k, v in row.items() if k}
@@ -190,5 +330,8 @@ class Adapter:
                         metrics[name] = value
                     else:  # nan/inf (e.g. Dist-Tracker's box loss): MLflow gets a 1.0 flag instead
                         metrics[f"{name}_nan"] = 1.0
+                if "time" in metrics:  # Ultralytics writes the cumulative training time
+                    metrics["epoch_seconds"] = metrics["time"] - previous_time
+                    previous_time = metrics["time"]
                 rows.append((epoch, metrics))
         return rows

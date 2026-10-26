@@ -1,0 +1,3 @@
+# Ortak dedektör pilotu: gürültü tabanı ve tek-parametreli denemeler (docs/pilot.md)
+defaults: [base, data/bsb, model/strong_baseline, setting/common_detector, setting/pilot]
+name: common_detector_bsb_pilot
