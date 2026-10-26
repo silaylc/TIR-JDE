@@ -1,11 +1,14 @@
-# Ortak dedektör ve pilotu
+# Ortak dedektör
 
 Katkımız tracker'da olduğu için başlık tablosundaki üç yöntem (Strong Baseline, Dist-Tracker, TIR-JDE) **aynı
-dedektörün** tespitlerini kullanır; yöntemler yalnızca tracker'da ayrışır. Dist-Tracker'ın SSQ kaybı ve SB'nin
-kendi dedektör tarifi ana tabloya girmez, ek ablasyondadır.
+dedektörün** tespitlerini kullanır; yöntemler yalnızca tracker'da ayrışır.
 
-Ayarlar `configs/setting/common_detector.yaml`, deneyler `common_detector_bsb` (ana koşu) ve
-`common_detector_bsb_pilot`.
+- Başlangıç: SB'nin SOT ağırlığı (YOLOv12-L, 640).
+- Eğitim ayarları ve kutu kaybı: **Dist-Tracker'ınki** (Dist'in `train.py`'si + fork'unun `default.yaml`'ı,
+  NWD + SSQ kaybı).
+- Tek koşu, 10 epoch, bütün eğitim kareleri: `python -m tir_jde.pipeline train-detector common_detector_bsb seed=0`.
+- Ayarlar `configs/setting/common_detector.yaml`. Daha kısa bir deneme gerekirse `common_detector_bsb_pilot`
+  (aynı ayarlar, her 2. kare).
 
 ## Kod sürümü
 
@@ -20,7 +23,7 @@ başlamaz. SB'nin tracker'ı ve ReID'i kendi sabit kopyasında (`configs/model/s
 ## Başlangıç ağırlığı
 
 **SB'nin SOT ağırlığı** (`SOT_yolov12l.pt`): YOLOv12-L, 640 px, Track 1/2 SOT verisi, SOT val'inde AP50-95 0.672.
-Yazar reposundan (commit 071fe76) indirilir, SHA-256 denetlenir (`model.detector.pretrained.sot`).
+Yazar reposundan (commit a97bba3) indirilir, SHA-256 denetlenir (`model.detector.pretrained.sot`).
 
 - Ağırlığın eğitim kaydındaki başlangıç `yolov12l.pt` (COCO); makale ise 1. aşamayı "sıfırdan" diye anlatıyor.
   Raporda "SB'nin SOT ağırlığı" yazılır, COCO/sıfırdan ayrımı yapılmaz.
@@ -28,57 +31,42 @@ Yazar reposundan (commit 071fe76) indirilir, SHA-256 denetlenir (`model.detector
   eğitilmişler; BSB'nin 16 val sekansının hepsinin karelerini görmüşler, test sekanslarının ikizlerini de.
 - Açık kontrol: SOT verisi ile BSB val/test arasında sahne çakışması (SOT karelerine parmak izi).
 
-## Ortak ayarlar
+## Eğitim ayarları (Dist-Tracker ile karşılaştırmalı)
 
-| Ayar | Değer |
-|---|---|
-| Model | YOLOv12-L, tek sınıf, SOT ağırlığından ince ayar |
-| Çözünürlük | 640 (SOT ağırlığının çözünürlüğü); 1280 yalnızca tek tohumlu duyarlılık deneyi |
-| Veri | BSB train: 102 − T_13, BB2P_01 − 16 val = 84 sekans; sekans bazlı bölme |
-| Optimizasyon | SGD (Ultralytics'te Nesterov), `lr0` 0.003, `lrf` 0.01, `batch` 16, `nbs` 64, AMP |
-| Isınma | `warmup_epochs` 1, `warmup_bias_lr` 0.0 (hazır tek sınıflı başlığı 0.1'lik bias lr'siyle bozmamak için) |
-| Augmentasyon | mosaic 1.0, `scale` 0.5, translate 0.1, fliplr 0.5; flipud, döndürme, eğme, perspektif, mixup, copy_paste 0; `hsv_h`/`hsv_s` 0 (termal gri), `hsv_v` 0.4 |
-| `close_mosaic` | ana koşu 10, pilot 2 |
-| Doğrulama | dondurulmuş `val.txt` (16 sekans), `conf` 0.01, `iou` 0.7, `max_det` 300 |
+| Ayar | Dist-Tracker | Ortak dedektör | Not |
+|---|---|---|---|
+| Model, başlangıç | YOLO12-s, sıfırdan | YOLOv12-L, SOT ağırlığı | ortak dedektör kararı |
+| Kutu kaybı | NWD + SSQ | NWD + SSQ (3 düzeltme, aşağıda) | |
+| imgsz | 640 | 640 | |
+| epochs | 50 | **10** | tek, kısa ince ayar |
+| batch | 16 | **32** | 64 daha hızlıydı ama `multi_scale` (960'a kadar) ile 80 GiB'a sığmaz; `nbs` 64 ile etkin batch aynı |
+| optimizer | auto | **SGD** | Dist'in uzun koşusunda auto SGD seçer; 10 epoch'ta AdamW'ye kayardı |
+| lr0, lrf, momentum, weight_decay | 0.01, 0.01, 0.937, 0.0005 | aynı | SB'nin kendi MOT ince ayarı da 0.01 |
+| warmup_epochs | 3 (50 epoch'ta) | **0.6** | aynı oran (3/50) |
+| close_mosaic | 10 (50 epoch'ta) | **2** | aynı oran; 10 olsa mosaic 10 epoch'ta hiç açılmazdı |
+| warmup_bias_lr, copy_paste, multi_scale | 0.1, 0.0, True | aynı | SB fork varsayılanları farklı (0.0, 0.1, False); açıkça yazılır |
+| mosaic, scale, translate, flip, hsv, mixup | Ultralytics varsayılanları | aynı | |
+| box, cls, dfl, nbs, amp | 7.5, 0.5, 1.5, 64, True | aynı | |
+| workers | 8 | 8 | A100 makinesinde 12 çekirdek: 8 veri işçisi, kalan çekirdekler ana süreç, val ve izleme için |
+| Doğrulama | Ultralytics varsayılanı | epoch sonlarında val'in her 10. karesi, sonda bütün val, `conf` 0.01 | eğitimi etkilemez |
 
-Fork varsayılanlarına güvenilmez; bütün argümanlar açıkça verilir (SB fork'unda `copy_paste` 0.1,
-`warmup_bias_lr` 0.0, `optimizer` auto).
+## Kutu kaybı: Dist-Tracker SSQ, üç düzeltmeyle
 
-## Sıra
+`tir_jde/modeling/adapters/_dist_ssq_loss.py`, Dist'in `BboxLoss`'unun (Shape-NWD + dinamik WIoU, DFL) uyarlaması;
+çalışma anında SB fork'unun `BboxLoss`'unun yerine konur (fork dosyaları değişmez). Yayınlanan Dist kodundaki üç
+hata makalenin anlattığı davranış için düzeltilir:
 
-1. **Sıfır-atış değerlendirme:** `python -m tir_jde.pipeline eval-detector common_detector_bsb tag=zeroshot`.
-   SOT ağırlığı eğitimsiz, val'in bütün karelerinde (`det_val_zero_shot.*`). İnce ayarın başlangıç noktası;
-   beklenmedik yüksek bir skor sızıntı ipucudur.
-2. **Zamanlama koşusu (P0):** `fraction=0.05`, 1 epoch. `train.seconds_per_iteration`, epoch süresi,
-   GPU belleği ve kullanımı. `fraction` listenin ilk %5'ini alır (rastgele değil); yalnızca süre için.
-3. **Pilot:** her 2. kare, 10 epoch, epoch sonlarında val'in her 10. karesi, sonunda tam val.
+1. Wasserstein terimi normalize edilmemiş (ham kare mesafe); karma hassasiyette taşar, smoke testteki NaN box loss
+   bundandı. Düzeltme: `1 − exp(−√W₂ / C)`, `C = 5 × ortalama hedef boyutu` (Dist reposundaki kullanılmayan
+   `NWDLoss`'un normalizasyonu).
+2. Eğitim ilerlemesi kayba hiç ulaşmıyor (`batch['epoch']` Ultralytics'te yok); NWD → WIoU geçişi hiç olmuyor.
+   Düzeltme: `on_train_epoch_start` geri çağrısı `epoch / epochs` oranını kayba iletir.
+3. WIoU için IoU, `xyxy` kutulara varsayılan `xywh=True` ile hesaplanıyor. Düzeltme: `xywh=False`.
 
-   | Koşu | Değişiklik | Tohum |
-   |---|---|---|
-   | R0a | — | 0 |
-   | R0b | — | 1 |
-   | R2 | `lr0` 0.005 | 0 |
-   | R3 | `lr0` 0.002 | 0 |
-   | R4 | `scale` 0.25 | 0 |
-
-4. **Ana koşu:** epoch sayısı pilot eğrisinden ve bütçeden; 3 tohum (`common_detector_bsb seed=0|1|2`).
-   Test seti hiçbir seçimde kullanılmaz.
-
-## Karar kuralı
-
-Birincil ölçüt tam val mAP50, recall yanında. Bir ayar R0a'dan |R0a − R0b| farkının iki katından fazla iyiyse
-benimsenir, değilse varsayılan kalır. `python -m tir_jde.pipeline pilot-report common_detector_bsb_pilot`
-tabloyu ve kararı `<work_dir>/runs/common_detector_bsb_pilot-pilot_report.md` dosyasına yazar.
-
-## MLflow'a kaydedilenler
-
-Koşu adı, tohum, tam config, `split_hash`, kare listesi hash'leri, epoch başına kayıp ve doğrulama metrikleri
-(`train.*`), epoch süresi ve iterasyon başına saniye, tam val (`det_val_full.*`), sıfır-atış
-(`det_val_zero_shot.*`), GPU belleği ve kullanımı (`gpu.*`).
+Tezde: "Dist-Tracker'ın kaybı makaledeki tanıma göre, yayınlanan koddaki üç hata düzeltilerek kullanıldı."
 
 ## Sınırlar (tezde yazılacak)
 
-- Gürültü yalnızca iki tohumla tahmin edildi; "iki katı" eşiği kabadır.
-- 10 epoch kısa bir ufuktur; `lr0` ve `scale` etkileri uzun eğitimde farklı çıkabilir.
-- Ortak dedektör SB fork'unda seçilip eğitilir; Dist-Tracker'ın kendi dedektörü (YOLO12 + SSQ) ana tabloda yoktur.
+- Tek koşu, tek tohum: ayarların etkisi ayrıca ölçülmedi; ayarlar Dist-Tracker'dan alındı.
+- Ortak dedektör SB'nin YOLOv12 kodunda eğitilir; Dist-Tracker'ın kendi dedektörü (YOLO12-s) ana tabloda yoktur.
 - SOT ağırlığının başlangıcı (COCO mu sıfırdan mı) yazar kaynaklarında çelişkili.

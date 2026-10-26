@@ -70,6 +70,12 @@ def _train(job: dict) -> dict:
     model = YOLO(job["model"])
     if str(job["model"]).endswith(".pt"):
         _check_weights_match_code(model)
+    if job.get("box_loss") == "dist_ssq":  # Dist-Tracker's box loss, swapped in at run time
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import _dist_ssq_loss
+
+        _dist_ssq_loss.patch()
+        model.add_callback("on_train_epoch_start", _dist_ssq_loss.epoch_callback)
     model.train(**job["train_args"])
     save_dir = Path(model.trainer.save_dir)
     return {"save_dir": str(save_dir), "best": str(save_dir / "weights" / "best.pt")}

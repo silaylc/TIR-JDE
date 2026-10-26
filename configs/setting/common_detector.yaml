@@ -1,45 +1,49 @@
 # Ortak dedektör: başlık tablosundaki üç yöntem (SB, Dist-Tracker, TIR-JDE) bu tek dedektörün tespitlerini kullanır;
 # yöntemler yalnızca tracker'da ayrışır. Kod: configs/model/common_detector.yaml (SB yazarının YOLOv12'si, a97bba3).
-# Başlangıç: SB'nin SOT ağırlığı (YOLOv12-L, 640) -> BSB'de sekans bazlı ince ayar. Kararlar: docs/pilot.md
+# Başlangıç: SB'nin SOT ağırlığı (YOLOv12-L, 640). Eğitim ayarları ve kutu kaybı Dist-Tracker'ınki (docs/pilot.md):
+# Dist'in train.py'si (640, batch 16, 50 epoch) + Dist fork'unun default.yaml'ı. Sapmalar satırlarda yazılı.
 model:
   detector:
     arch: yolov12l
     init: sot
-    epochs: 30                  # GEÇİCİ: pilot eğrisi ve bütçeye göre kesinleşecek
-    batch: 16
-    imgsz: 640                  # SOT ağırlığının çözünürlüğü; 1280 yalnızca tek tohumlu duyarlılık deneyi
-    workers: auto
-    frame_step: 1
-    val_frame_step: 1
+    box_loss: dist_ssq          # Dist-Tracker'ın SSQ kaybı (Shape-NWD + dinamik WIoU), 3 hata düzeltmesiyle
+    epochs: 10                  # Dist 50; tek, 10 epoch'luk ince ayar
+    batch: 32                   # Dist 16. 64 daha hızlıydı ama multi_scale (960'a kadar) ile 80 GiB'a sığmaz;
+                                # nbs=64 ile etkin batch üçünde de 64
+    imgsz: 640                  # = Dist
+    workers: 8                  # = Dist; A100 makinesinde 12 çekirdek: 8 veri işçisi + ana süreç, val ve izleme
+    frame_step: 1               # bütün eğitim kareleri
+    val_frame_step: 10          # epoch sonlarında val'in her 10. karesi; eğitimden sonra bütün val
     extra:                      # Ultralytics train() argümanları; fork varsayılanlarına güvenilmez, açıkça yazılır
-      single_cls: true
-      multi_scale: false
-      amp: true                 # Dist nan kontrolüne bağlı değil: dedektör artık ortak, standart kayıp
-      optimizer: SGD            # Ultralytics SGD'yi nesterov=True ile kurar
-      lr0: 0.003                # ince ayar: düşük lr (pilotta 0.002 / 0.005 denenir)
-      lrf: 0.01
-      momentum: 0.937
-      weight_decay: 0.0005
-      nbs: 64
-      warmup_epochs: 1.0        # kısa ısınma
-      warmup_bias_lr: 0.0       # ince ayarda tek sınıflı başlık hazır; 0.1'lik bias lr'si (lr0'ın 33 katı) onu bozabilir
-      mosaic: 1.0
-      close_mosaic: 10
-      scale: 0.5                # pilotta 0.25 denenir
-      translate: 0.1
-      fliplr: 0.5
-      flipud: 0.0
-      degrees: 0.0
-      shear: 0.0
-      perspective: 0.0
-      hsv_h: 0.0                # termal gri görüntüde etkisiz
-      hsv_s: 0.0
-      hsv_v: 0.4
-      mixup: 0.0
-      copy_paste: 0.0           # SB fork varsayılanı 0.1
-      box: 7.5
-      cls: 0.5
-      dfl: 1.5
-      conf: 0.01                # doğrulama eşiği
-      iou: 0.7
+      single_cls: true          # = Dist
+      multi_scale: true         # = Dist (her batch 320-960 arası rastgele boyut)
+      amp: true                 # = Dist; normalize NWD ile NaN beklenmez
+      optimizer: SGD            # Dist 'auto': onun uzun koşusunda SGD seçer; 10 epoch'ta AdamW'ye kayardı
+      lr0: 0.01                 # = Dist (SB'nin kendi MOT ince ayarı da 0.01)
+      lrf: 0.01                 # = Dist
+      momentum: 0.937           # = Dist
+      weight_decay: 0.0005      # = Dist
+      nbs: 64                   # = Dist
+      warmup_epochs: 0.6        # Dist 3 / 50 epoch -> aynı oran 10 epoch'ta 0.6
+      warmup_momentum: 0.8      # = Dist
+      warmup_bias_lr: 0.1       # = Dist (SB fork varsayılanı 0.0)
+      mosaic: 1.0               # = Dist
+      close_mosaic: 2           # Dist 10 / 50 epoch -> aynı oran 10 epoch'ta 2 (10 olsa mosaic hiç açılmazdı)
+      scale: 0.5                # = Dist
+      translate: 0.1            # = Dist
+      fliplr: 0.5               # = Dist
+      flipud: 0.0               # = Dist
+      degrees: 0.0              # = Dist
+      shear: 0.0                # = Dist
+      perspective: 0.0          # = Dist
+      hsv_h: 0.015              # = Dist (gri termal görüntüde etkisiz)
+      hsv_s: 0.7                # = Dist (gri termal görüntüde etkisiz)
+      hsv_v: 0.4                # = Dist
+      mixup: 0.0                # = Dist
+      copy_paste: 0.0           # = Dist (SB fork varsayılanı 0.1)
+      box: 7.5                  # = Dist
+      cls: 0.5                  # = Dist
+      dfl: 1.5                  # = Dist
+      conf: 0.01                # yalnızca doğrulama eşiği (eğitimi etkilemez); tracker'a giden eşikle aynı
+      iou: 0.7                  # doğrulama NMS'i (= Ultralytics varsayılanı)
       max_det: 300

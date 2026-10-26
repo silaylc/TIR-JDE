@@ -25,24 +25,37 @@ def test_every_kth_frame_of_each_sequence_starting_with_frame_1():
     assert dataset.frames_hash(kept) != dataset.frames_hash(imgs)
 
 
-def test_common_detector_and_pilot_settings(tmp_path):
-    ov = [f"paths.baselines_dir={tmp_path}", f"paths.work_dir={tmp_path}", "model.detector.init=scratch"]
-    pilot = load_config("common_detector_bsb_pilot", ov)
-    det = pilot["model"]["detector"]
-    args = get_adapter(pilot, {"root": str(tmp_path / "d")}).detector_job()["train_args"]
-    assert (det["arch"], args["epochs"], args["imgsz"], args["batch"], args["nbs"]) == ("yolov12l", 10, 640, 16, 64)
-    assert (args["optimizer"], args["lr0"], args["warmup_epochs"], args["close_mosaic"]) == ("SGD", 0.003, 1.0, 2)
-    assert (args["copy_paste"], args["hsv_h"], args["hsv_s"], args["multi_scale"]) == (0.0, 0.0, 0.0, False)
-    assert (args["conf"], args["single_cls"], args["amp"]) == (0.01, True, True)
-    assert (det["frame_step"], det["val_frame_step"], pilot["model"]["reid"]["enabled"]) == (2, 10, False)
-    assert args["data"] == str(tmp_path / "runs" / "common_detector_bsb_pilot-s0" / "detector_data" / "dataset.yaml")
-    assert args["workers"] >= 1  # auto = CPU count
+# Dist-Tracker's train.py (640, batch 16, 50 epochs) + its fork's default.yaml
+DIST_TRAIN = {"imgsz": 640, "single_cls": True, "multi_scale": True, "amp": True, "lr0": 0.01, "lrf": 0.01,
+              "momentum": 0.937, "weight_decay": 0.0005, "nbs": 64, "warmup_momentum": 0.8, "warmup_bias_lr": 0.1,
+              "mosaic": 1.0, "scale": 0.5, "translate": 0.1, "fliplr": 0.5, "flipud": 0.0, "degrees": 0.0,
+              "shear": 0.0, "perspective": 0.0, "hsv_h": 0.015, "hsv_s": 0.7, "hsv_v": 0.4, "mixup": 0.0,
+              "copy_paste": 0.0, "box": 7.5, "cls": 0.5, "dfl": 1.5, "workers": 8}
 
+
+def test_common_detector_trains_with_dist_tracker_settings(tmp_path):
+    ov = [f"paths.baselines_dir={tmp_path}", f"paths.work_dir={tmp_path}", "model.detector.init=scratch"]
     main = load_config("common_detector_bsb", ov)
-    main_args = get_adapter(main, {"root": str(tmp_path / "d")}).detector_job()["train_args"]
-    assert main_args["close_mosaic"] == 10
-    assert main_args["data"] == str(tmp_path / "d" / "yolo" / "dataset.yaml")  # all frames
+    job = get_adapter(main, {"root": str(tmp_path / "d")}).detector_job()
+    args = job["train_args"]
+    assert {k: args[k] for k in DIST_TRAIN} == DIST_TRAIN
+    assert job["box_loss"] == "dist_ssq"
+    # deviations, each written in the config: 10 epochs (Dist 50) with the epoch-based settings scaled 10/50,
+    # explicit SGD (Dist's 'auto' picks SGD for its long run), batch 32 (multi_scale up to 960 px)
+    assert (args["epochs"], args["warmup_epochs"], args["close_mosaic"]) == (10, 0.6, 2)
+    assert (args["optimizer"], args["batch"]) == ("SGD", 32)
+    assert args["data"] == str(tmp_path / "d" / "yolo" / "dataset.yaml") or args["data"].endswith(
+        "detector_data/dataset.yaml")
+    assert main["model"]["detector"]["val_frame_step"] == 10 and main["model"]["detector"]["frame_step"] == 1
     assert load_config("common_detector_bsb", [])["model"]["detector"]["init"] == "sot"
+
+    pilot = load_config("common_detector_bsb_pilot", ov)
+    assert pilot["model"]["detector"]["frame_step"] == 2  # optional shorter variant, same settings
+
+
+def test_strong_baseline_recipe_keeps_the_ultralytics_loss(tmp_path):
+    cfg = load_config("strong_baseline_bsb", [f"paths.baselines_dir={tmp_path}", f"paths.work_dir={tmp_path}"])
+    assert get_adapter(cfg, {"root": str(tmp_path / "d")}).detector_job()["box_loss"] == "ultralytics"
 
 
 def test_frame_lists_are_written_with_their_hash(synthetic_cfg):

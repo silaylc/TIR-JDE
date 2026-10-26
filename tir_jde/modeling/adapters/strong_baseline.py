@@ -39,6 +39,7 @@ class StrongBaselineAdapter(Adapter):
             "lib_root": str(self.yolo_dir),
             "cwd": str(self.yolo_dir),
             "model": self._model_spec(),
+            "box_loss": det.get("box_loss", "ultralytics"),  # "dist_ssq": Dist-Tracker's loss (common detector)
             "train_args": {
                 "data": str(self.detector_data_yaml()),
                 "epochs": det["epochs"],
