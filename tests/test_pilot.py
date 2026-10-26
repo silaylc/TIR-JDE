@@ -86,8 +86,11 @@ def test_sot_start_downloads_once_and_checks_the_hash(tmp_path, monkeypatch):
     adapter = get_adapter(load_config("common_detector_bsb", ov), {"root": str(tmp_path / "d")})
     assert adapter.detector_job()["model"] == str(tmp_path / "weights" / "strong_baseline_sot_SOT_yolov12l.pt")
     adapter.detector_job()
-    assert len(calls) == 1 and calls[0].endswith("/071fe7611eef373d503e87236c6a42ea613e6d0f/BoT-SORT/yolov12/"
-                                                   "weights/v1/SOT_yolov12l.pt")
+    assert len(calls) == 1 and calls[0].endswith("/a97bba3252814543a48286b74ef182e731f38221/BoT-SORT/yolov12/"
+                                                   "weights/SOT_yolov12l.pt")
+    # the detector runs in the author's code at the commit that matches the weights
+    assert adapter.repo_dir.name == "common_detector"
+    assert adapter.detector_job()["lib_root"].endswith("common_detector/BoT-SORT/yolov12")
 
 
 def test_sot_start_refuses_a_changed_file_or_another_architecture(tmp_path, monkeypatch):
@@ -102,10 +105,10 @@ def test_sot_start_refuses_a_changed_file_or_another_architecture(tmp_path, monk
 
 def test_coco_url_follows_the_architecture(tmp_path, monkeypatch):
     calls = _fake_download(monkeypatch)
-    cfg = load_config("common_detector_bsb", [f"paths.baselines_dir={tmp_path}", f"paths.work_dir={tmp_path}",
-                                              "model.detector.init=coco"])
+    cfg = load_config("strong_baseline_bsb", [f"paths.baselines_dir={tmp_path}", f"paths.work_dir={tmp_path}",
+                                              "model.detector.init=coco", "model.detector.arch=yolov12s"])
     get_adapter(cfg, {"root": str(tmp_path / "d")}).detector_job()
-    assert calls == ["https://github.com/sunsmarterjie/yolov12/releases/download/turbo/yolov12l.pt"]
+    assert calls == ["https://github.com/sunsmarterjie/yolov12/releases/download/turbo/yolov12s.pt"]
 
 
 def test_zero_shot_validation_uses_the_starting_weights(synthetic_cfg, monkeypatch):
@@ -165,7 +168,7 @@ def test_runner_validates_with_the_fork(tmp_path):
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text(FAKE_VAL)
     job = {"mode": "val", "lib_root": str(tmp_path / "fork"), "cwd": str(tmp_path), "weights": "best.pt",
-           "val_args": {"data": "d.yaml"}, "result_file": str(tmp_path / "r.json")}
+           "val_args": {"data": "d.yaml"}, "check_weights": False, "result_file": str(tmp_path / "r.json")}
     (tmp_path / "job.json").write_text(json.dumps(job))
     subprocess.run([sys.executable, str(RUNNER), str(tmp_path / "job.json")], check=True)
     result = json.loads((tmp_path / "r.json").read_text())
@@ -206,3 +209,46 @@ def test_pilot_report_can_use_the_coco_run_as_reference(tmp_path):
     rows = {ln.split("|")[1].strip(): ln for ln in stage_pilot_report(cfg, baseline="R1").read_text().splitlines()
             if ln.startswith("| R")}
     assert "referans" in rows["R1"] and "varsayılan kalır" in rows["R2"]  # +0.01 vs R1 < 0.02
+
+
+FAKE_MISMATCH = textwrap.dedent(
+    '''
+    class _T:
+        def __init__(self, *shape): self.shape = shape
+
+    class _Net:
+        yaml = {"nc": 1}
+        def float(self): return self
+        def state_dict(self): return {"model.6.attn.qkv.conv.weight": _T(768, 256, 1, 1)}
+
+    class YOLO:
+        def __init__(self, weights): self.model = _Net()
+        def train(self, **kw): raise AssertionError("must not train")
+        def val(self, **kw): raise AssertionError("must not validate")
+    '''
+)
+FAKE_TASKS = textwrap.dedent(
+    '''
+    from ultralytics import _T
+
+    class DetectionModel:
+        def __init__(self, cfg, nc, verbose): pass
+        def state_dict(self):
+            return {"model.6.attn.qk.conv.weight": _T(512, 256, 1, 1), "model.6.attn.v.conv.weight": _T(256, 256, 1, 1)}
+    '''
+)
+
+
+@pytest.mark.parametrize("mode", ["train", "val"])
+def test_runner_refuses_weights_saved_by_other_code(tmp_path, mode):
+    pkg = tmp_path / "fork" / "ultralytics"
+    (pkg / "nn").mkdir(parents=True)
+    (pkg / "__init__.py").write_text(FAKE_MISMATCH)
+    (pkg / "nn" / "__init__.py").write_text("")
+    (pkg / "nn" / "tasks.py").write_text(FAKE_TASKS)
+    job = {"mode": mode, "lib_root": str(tmp_path / "fork"), "cwd": str(tmp_path), "model": "SOT_yolov12l.pt",
+           "weights": "SOT_yolov12l.pt", "train_args": {}, "val_args": {}, "result_file": str(tmp_path / "r.json")}
+    (tmp_path / "job.json").write_text(json.dumps(job))
+    proc = subprocess.run([sys.executable, str(RUNNER), str(tmp_path / "job.json")], capture_output=True, text=True)
+    assert proc.returncode != 0
+    assert "uyumsuz" in proc.stderr and "qkv" in proc.stderr

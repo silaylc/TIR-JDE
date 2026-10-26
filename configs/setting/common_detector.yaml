@@ -1,5 +1,5 @@
 # Ortak dedektör: başlık tablosundaki üç yöntem (SB, Dist-Tracker, TIR-JDE) bu tek dedektörün tespitlerini kullanır;
-# yöntemler yalnızca tracker'da ayrışır. Strong Baseline fork'unda (YOLOv12-turbo, Ultralytics 8.3.63) eğitilir.
+# yöntemler yalnızca tracker'da ayrışır. Kod: configs/model/common_detector.yaml (SB yazarının YOLOv12'si, a97bba3).
 # Başlangıç: SB'nin SOT ağırlığı (YOLOv12-L, 640) -> BSB'de sekans bazlı ince ayar. Kararlar: docs/pilot.md
 model:
   detector:
@@ -43,5 +43,3 @@ model:
       conf: 0.01                # doğrulama eşiği
       iou: 0.7
       max_det: 300
-  reid:
-    enabled: false              # dedektör eğitimi; SB'nin ReID'i tracker adımında ayrı eğitilir

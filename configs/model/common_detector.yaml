@@ -1,0 +1,28 @@
+# Ortak dedektör: Strong Baseline yazarının YOLOv12 kodu, SB'nin SOT ağırlığıyla uyumlu son sürümde.
+# Yazar 3 Temmuz 2025'te (commit 255f987) repodaki YOLOv12 kodunu turbo sürümüne geçirdi: dikkat katmanı
+# qkv + 7x7 konum katmanı -> qk + v + 5x5, L/X için MLP oranı 1.2 -> 1.5. SOT_yolov12l.pt ve MOT_yolov12n.pt eski
+# sürümle kaydedildiği için yeni kodda yüklenemez (değerlendirme çöker, eğitimde dikkat katmanları sessizce
+# rastgele başlar). Bu yüzden dedektör, ağırlıklarla aynı koddaki son commit'te (a97bba3, 2 Temmuz 2025) çalışır.
+# Strong Baseline'ın tracker'ı ve ReID'i kendi sabit kopyasında (configs/model/strong_baseline.yaml) kalır.
+model:
+  name: common_detector
+  adapter: strong_baseline        # aynı çağrılar: BoT-SORT/yolov12 içindeki fork, YOLO(...).train(...)
+  repo: https://github.com/wish44165/YOLOv12-BoT-SORT-ReID
+  commit: a97bba3252814543a48286b74ef182e731f38221
+  python: ${SB_PYTHON:-python}    # Strong Baseline ortamı (Python 3.11, torch 2.2.2, flash-attn)
+  detector:
+    arch: yolov12l
+    init: sot
+    pretrained:
+      sot:                        # SB'nin SOT ağırlığı: YOLOv12-L, 640, Track 1/2 SOT verisi
+        url: https://raw.githubusercontent.com/wish44165/YOLOv12-BoT-SORT-ReID/a97bba3252814543a48286b74ef182e731f38221/BoT-SORT/yolov12/weights/SOT_yolov12l.pt
+        sha256: e1b99a2a74ee20b6cd76c85b1e507f658ab1900a3d328739a4ac0849726ea61e
+        arch: yolov12l
+    epochs: 30
+    batch: 16
+    imgsz: 640
+    workers: auto
+    extra: {}
+  reid:
+    enabled: false                # yalnızca dedektör
+  tracker: {}

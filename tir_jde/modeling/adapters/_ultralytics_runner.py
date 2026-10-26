@@ -44,9 +44,32 @@ def _import_fork(lib_root: str):
     return YOLO
 
 
+def _check_weights_match_code(model) -> None:
+    """A checkpoint must fit the fork's code exactly before it is trained or evaluated.
+
+    Ultralytics rebuilds the model from the checkpoint's yaml with the *installed* code and
+    copies only the tensors whose names and shapes match; anything else silently starts from
+    random values (e.g. YOLOv12 v1 attention ``qkv``/7x7 vs turbo ``qk``+``v``/5x5). Here the
+    model is rebuilt the same way and every tensor must match in both directions."""
+    from ultralytics.nn.tasks import DetectionModel
+
+    loaded = model.model.float().state_dict()
+    fresh = DetectionModel(cfg=model.model.yaml, nc=model.model.yaml.get("nc"), verbose=False).state_dict()
+    mismatch = [k for k, v in loaded.items() if k not in fresh or tuple(fresh[k].shape) != tuple(v.shape)]
+    missing = [k for k in fresh if k not in loaded]
+    if mismatch or missing:
+        raise RuntimeError(
+            f"Checkpoint bu kodla uyumsuz: {len(mismatch)} tensör uymuyor, {len(missing)} tensör eksik "
+            f"(ör. {(mismatch + missing)[:4]}). Ağırlığı kaydeden kod sürümünü kullanın."
+        )
+    print(f"[runner] ağırlık-kod uyumu tamam: {len(loaded)} tensör", flush=True)
+
+
 def _train(job: dict) -> dict:
     YOLO = _import_fork(job["lib_root"])
     model = YOLO(job["model"])
+    if str(job["model"]).endswith(".pt"):
+        _check_weights_match_code(model)
     model.train(**job["train_args"])
     save_dir = Path(model.trainer.save_dir)
     return {"save_dir": str(save_dir), "best": str(save_dir / "weights" / "best.pt")}
@@ -125,7 +148,10 @@ def _track(job: dict) -> dict:
 def _val(job: dict) -> dict:
     """``YOLO(weights).val(**val_args)``: precision, recall, mAP50, mAP50-95 on every val frame."""
     YOLO = _import_fork(job["lib_root"])
-    metrics = YOLO(job["weights"]).val(**job["val_args"])
+    model = YOLO(job["weights"])
+    if job.get("check_weights", True):
+        _check_weights_match_code(model)
+    metrics = model.val(**job["val_args"])
     return {"metrics": {k: float(v) for k, v in metrics.results_dict.items()},
             "speed_ms": {k: float(v) for k, v in getattr(metrics, "speed", {}).items()}}
 

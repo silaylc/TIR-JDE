@@ -15,13 +15,7 @@ model:
       # fork'taki mimari YOLOv12-turbo (ultralytics/cfg/models/v12/yolov12.yaml); COCO ağırlığı da turbo sürümü
       coco:
         url: https://github.com/sunsmarterjie/yolov12/releases/download/turbo/{arch}.pt
-      # Strong Baseline'ın SOT ağırlığı: YOLOv12-L, 640, Track 1/2 SOT verisi (yazar reposu, commit 071fe76).
-      # Eğitim kaydındaki başlangıç: yolov12l.pt (makale "sıfırdan" diyor); raporda "SB'nin SOT ağırlığı".
-      # MOT_yolov12n.pt ve ReID model_0016.pth kullanılmaz (BSB val/test sekanslarının karelerini görmüşler).
-      sot:
-        url: https://raw.githubusercontent.com/wish44165/YOLOv12-BoT-SORT-ReID/071fe7611eef373d503e87236c6a42ea613e6d0f/BoT-SORT/yolov12/weights/v1/SOT_yolov12l.pt
-        sha256: e1b99a2a74ee20b6cd76c85b1e507f658ab1900a3d328739a4ac0849726ea61e
-        arch: yolov12l
+      # SB'nin SOT ağırlığı bu kopyanın (turbo) koduyla uyumsuz; ortak dedektör configs/model/common_detector.yaml'da.
     epochs: 100
     batch: 64
     imgsz: 640

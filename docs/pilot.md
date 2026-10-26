@@ -4,8 +4,18 @@ Katkımız tracker'da olduğu için başlık tablosundaki üç yöntem (Strong B
 dedektörün** tespitlerini kullanır; yöntemler yalnızca tracker'da ayrışır. Dist-Tracker'ın SSQ kaybı ve SB'nin
 kendi dedektör tarifi ana tabloya girmez, ek ablasyondadır.
 
-Dedektör Strong Baseline fork'unda (YOLOv12-turbo, Ultralytics 8.3.63) eğitilir:
-`configs/setting/common_detector.yaml`, deneyler `common_detector_bsb` (ana koşu) ve `common_detector_bsb_pilot`.
+Ayarlar `configs/setting/common_detector.yaml`, deneyler `common_detector_bsb` (ana koşu) ve
+`common_detector_bsb_pilot`.
+
+## Kod sürümü
+
+Dedektör, SB yazarının YOLOv12 kodunda (Ultralytics 8.3.63 fork'u) **a97bba3** commit'inde (2 Temmuz 2025) çalışır
+(`configs/model/common_detector.yaml`). Yazar 3 Temmuz 2025'te (255f987) kodu YOLOv12-turbo'ya geçirdi: dikkat
+katmanı `qkv` + 7×7 konum katmanı yerine `qk` + `v` + 5×5, L/X için MLP oranı 1.2 yerine 1.5. Yayınlanan
+`SOT_yolov12l.pt` ve `MOT_yolov12n.pt` eski sürümle kaydedildi; yeni kodda değerlendirme çöker, eğitimde ise
+Ultralytics yalnızca uyan tensörleri aktardığı için dikkat katmanları **sessizce rastgele** başlar. Runner bu yüzden
+her `.pt` başlangıcında ağırlığı kodla yeniden kurulan modelle karşılaştırır; tek bir tensör uymazsa eğitim
+başlamaz. SB'nin tracker'ı ve ReID'i kendi sabit kopyasında (`configs/model/strong_baseline.yaml`) kalır.
 
 ## Başlangıç ağırlığı
 

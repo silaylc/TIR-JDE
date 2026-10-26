@@ -1,3 +1,3 @@
 # Ortak dedektör, ana koşu (3 tohum): python -m tir_jde.pipeline train-detector common_detector_bsb seed=<0|1|2>
-defaults: [base, data/bsb, model/strong_baseline, setting/common_detector]
+defaults: [base, data/bsb, model/common_detector, setting/common_detector]
 name: common_detector_bsb
