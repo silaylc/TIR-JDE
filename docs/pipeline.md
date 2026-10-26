@@ -117,6 +117,19 @@ Bir deney + seed (+ `tag`) **tek bir MLflow run'ıdır**; train, evaluate ve vis
 Aynı run adıyla farklı ayarlar (ör. başka epoch sayısı) çalıştırılırsa pipeline durur; yeni ayar için
 yeni `seed` veya `tag=...` verin.
 
+### Güvenlik ağı: journal ve yedek MLflow
+
+MLflow sunucusu bir eğitimi asla durdurmaz:
+
+1. Her kayıt çağrısı önce run klasöründeki `mlflow_journal.jsonl` dosyasına yazılır, sonra sunucuya gönderilir.
+2. Aşama başlarken sunucuya ulaşılamazsa 3 kez denenir (20 sn arayla); olmazsa aşama MLflow'suz sürer,
+   kayıtlar journal'da birikir. Aşama sırasında başarısız bir gönderim yalnızca uyarı verir.
+3. Her aşamanın sonunda journal ikinci, yerel bir MLflow'a kopyalanır: `<work_dir>/mlflow_backup.db`
+   (dosyalar `<work_dir>/mlartifacts_backup`). Açmak için
+   `mlflow ui --backend-store-uri sqlite:///<work_dir>/mlflow_backup.db`. Kapatmak için `TIRJDE_MLFLOW_BACKUP=off`.
+4. Sunucuya gitmeyen kayıtlar sonradan gönderilir:
+   `python -m tir_jde.pipeline mlflow-sync <deney> seed=<s> [tag=<t>]`. Durum `mlflow_sync.json` dosyasında.
+
 ## Yeni model eklemek
 
 1. `configs/model/<model>.yaml` ve `configs/experiment/<model>_bsb.yaml`

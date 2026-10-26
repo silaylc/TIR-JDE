@@ -12,6 +12,7 @@ Usage (every command takes an experiment config plus optional key=value override
     python -m tir_jde.pipeline eval-detector  common_detector_bsb tag=zeroshot
     python -m tir_jde.pipeline train-detector common_detector_bsb_pilot seed=0 tag=R0a
     python -m tir_jde.pipeline pilot-report   common_detector_bsb_pilot
+    python -m tir_jde.pipeline mlflow-sync    common_detector_bsb_pilot seed=0 tag=R0a  # missed MLflow calls
 
 Each experiment + seed (+ tag) is one MLflow run; every stage logs into it.
 """
@@ -90,30 +91,32 @@ class _LiveTrainLog:
                 self._push_logs()
 
     def _push_epochs(self) -> None:
-        try:
-            from mlflow.entities import Metric
-            from mlflow.tracking import MlflowClient
+        from tir_jde.tracking import log_batch
 
-            client, now = MlflowClient(), int(time.time() * 1000)
+        try:
+            now = int(time.time() * 1000)
+            rdir = self.adapter.run_dir
             # detector: one row per epoch in Ultralytics' results.csv
-            for results in self.adapter.run_dir.glob("detector/**/results.csv"):
+            for results in rdir.glob("detector/**/results.csv"):
                 for epoch, metrics in self.adapter.epoch_metrics(results):
                     if epoch in self.logged_epochs or not metrics:
                         continue
-                    client.log_batch(self.run_id, metrics=[
-                        Metric(f"train.{k}", v, now, epoch) for k, v in metrics.items()])
+                    log_batch(rdir, self.run_id, [(f"train.{k}", v, now, epoch) for k, v in metrics.items()])
                     self.logged_epochs.add(epoch)
             # ReID (FastReID): one JSON line every 200 iterations and at each epoch end
-            for step, metrics in _fastreid_metrics(self.adapter.run_dir / "reid" / "metrics.json"):
+            for step, metrics in _fastreid_metrics(rdir / "reid" / "metrics.json"):
                 if step in self.logged_reid_steps:
                     continue
-                client.log_batch(self.run_id, metrics=[
-                    Metric(f"reid.{k}", v, now, step) for k, v in metrics.items()])
+                log_batch(rdir, self.run_id, [(f"reid.{k}", v, now, step) for k, v in metrics.items()])
                 self.logged_reid_steps.add(step)
         except Exception as e:  # noqa: BLE001 - live logging must never stop training
             print(f"[mlflow] canlı kayıt atlandı: {e}", flush=True)
 
     def _push_logs(self) -> None:
+        # Interim copies of the training log go to the server only; the final log is logged
+        # (and journaled) when the stage ends.
+        if self.run_id is None:
+            return
         try:
             from mlflow.tracking import MlflowClient
 
@@ -133,6 +136,7 @@ class _GpuMonitor:
              "--format=csv,noheader,nounits")
 
     def __init__(self, logs_dir: Path, run_id: str | None, every: float = 15.0, push_every: float = 60.0):
+        # logs_dir = <run_dir>/logs; the samples are journaled under <run_dir>
         self.file = logs_dir / "gpu.csv"
         self.run_id, self.every, self.push_every = run_id, every, push_every
         self.samples: list[tuple[float, float, float, float]] = []  # seconds, used MiB, total MiB, util %
@@ -161,17 +165,15 @@ class _GpuMonitor:
             f.write(",".join(str(v) for v in row) + "\n")
 
     def _push(self) -> None:
-        if not self.run_id or self._pushed >= len(self.samples):
-            return
-        from mlflow.entities import Metric
-        from mlflow.tracking import MlflowClient
+        from tir_jde.tracking import log_batch
 
+        if self._pushed >= len(self.samples):
+            return
         now = int(time.time() * 1000)
         new = self.samples[self._pushed:]
-        MlflowClient().log_batch(self.run_id, metrics=[
+        log_batch(self.file.parent.parent, self.run_id, [
             m for sec, used, _, util in new
-            for m in (Metric("gpu.memory_used_mib", used, now, int(sec)),
-                      Metric("gpu.utilization_pct", util, now, int(sec)))])
+            for m in (("gpu.memory_used_mib", used, now, int(sec)), ("gpu.utilization_pct", util, now, int(sec)))])
         self._pushed = len(self.samples)
 
     def _loop(self) -> None:
@@ -245,7 +247,7 @@ def stage_train(cfg: dict, detector_only: bool = False) -> dict:
         mlflow.set_tags({"baseline.commit": commit, "data.split_hash": manifest["split_hash"]})
         mlflow.log_params({f"data.count.{k}": v for k, v in manifest["counts"].items()})
         mlflow.log_dict(manifest["sequences"], "data/sequences.json")
-        log_environment(mlflow, cfg["model"]["name"], adapter.python)
+        log_environment(mlflow, cfg["model"]["name"], adapter.python, adapter.run_dir)
 
         run_id = mlflow.active_run().info.run_id
         live = _LiveTrainLog(adapter, run_id)
@@ -502,7 +504,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m tir_jde.pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("preprocess", "train", "train-detector", "eval-detector", "evaluate", "visualize", "run",
-                 "pilot-report"):
+                 "pilot-report", "mlflow-sync"):
         p = sub.add_parser(name)
         p.add_argument("experiment")
         p.add_argument("overrides", nargs="*")
@@ -539,6 +541,11 @@ def main(argv: list[str] | None = None) -> None:
         stage_train(cfg, detector_only=True)
     elif args.command == "eval-detector":
         stage_eval_detector(cfg)
+    elif args.command == "mlflow-sync":
+        from tir_jde.tracking import backup, sync_primary
+
+        sync_primary(cfg)
+        backup(cfg)
     elif args.command == "pilot-report":
         stage_pilot_report(cfg, args.baseline, tuple(args.noise))
     elif args.command == "evaluate":
