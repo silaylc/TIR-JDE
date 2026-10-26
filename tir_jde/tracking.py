@@ -322,37 +322,61 @@ def backup_uri(cfg: dict) -> str | None:
 
 def replay(cfg: dict, uri: str, entries: list[dict], run_id: str | None = None,
            artifacts_dir: str = "mlartifacts") -> str:
-    """Writes journal entries into the run ``run_id`` (or a new run) of the store at ``uri``."""
-    import mlflow
+    """Writes journal entries into the run ``run_id`` (or a new run) of the store at ``uri``.
 
-    previous = mlflow.get_tracking_uri()
-    try:
-        return _replay(mlflow, cfg, uri, entries, run_id, artifacts_dir)
-    finally:
-        mlflow.set_tracking_uri(previous)
-
-
-def _replay(mlflow, cfg: dict, uri: str, entries: list[dict], run_id: str | None, artifacts_dir: str) -> str:
-    from mlflow.entities import Metric
+    Uses an ``MlflowClient`` bound to ``uri``: the process-wide tracking URI (which
+    ``mlflow.set_tracking_uri`` also exports as ``MLFLOW_TRACKING_URI``) is never touched,
+    so a backup copy cannot redirect the next stage."""
+    from mlflow.entities import Metric, Param, RunTag
     from mlflow.tracking import MlflowClient
 
-    mlflow.set_tracking_uri(uri)
+    client = MlflowClient(tracking_uri=uri)
     name = cfg.get("tracking", {}).get("experiment", "tir-jde")
-    if uri.startswith("sqlite:") and mlflow.get_experiment_by_name(name) is None:
-        artifacts = (Path(cfg["paths"]["work_dir"]) / artifacts_dir).resolve()
-        mlflow.create_experiment(name, artifact_location=artifacts.as_uri())
-    mlflow.set_experiment(name)
-    with mlflow.start_run(run_id=run_id, run_name=run_name(cfg)) as run:
-        client = MlflowClient()
-        for e in entries:
-            op, args, kwargs = e["op"], e["args"], e["kwargs"]
-            if op == "log_batch":
-                client.log_batch(run.info.run_id, metrics=[Metric(*m) for m in args[0]])
-            elif op in ("log_artifact", "log_artifacts") and not Path(args[0]).exists():
-                print(f"[mlflow] artifact artık yok, atlandı: {args[0]}", flush=True)
-            else:
-                getattr(mlflow, op)(*args, **kwargs)
-        return run.info.run_id
+    exp = client.get_experiment_by_name(name)
+    if exp is None:
+        location = None
+        if uri.startswith("sqlite:"):
+            location = (Path(cfg["paths"]["work_dir"]) / artifacts_dir).resolve().as_uri()
+        exp_id = client.create_experiment(name, artifact_location=location)
+    else:
+        exp_id = exp.experiment_id
+    if run_id is None:
+        run_id = client.create_run(exp_id, run_name=run_name(cfg)).info.run_id
+
+    def now() -> int:
+        return int(time.time() * 1000)
+
+    for e in entries:
+        op, args, kw = e["op"], e["args"], e["kwargs"]
+        if op == "log_batch":
+            client.log_batch(run_id, metrics=[Metric(*m) for m in args[0]])
+        elif op == "set_tag":
+            client.set_tag(run_id, args[0], args[1])
+        elif op == "set_tags":
+            client.log_batch(run_id, tags=[RunTag(k, str(v)) for k, v in args[0].items()])
+        elif op == "log_param":
+            client.log_param(run_id, args[0], args[1])
+        elif op == "log_params":
+            items = [Param(k, str(v)) for k, v in args[0].items()]
+            for i in range(0, len(items), 100):  # MLflow accepts at most 100 params per batch
+                client.log_batch(run_id, params=items[i:i + 100])
+        elif op == "log_metric":
+            step = kw.get("step", args[2] if len(args) > 2 else None) or 0
+            client.log_metric(run_id, args[0], float(args[1]), timestamp=now(), step=step)
+        elif op == "log_metrics":
+            step = kw.get("step", args[1] if len(args) > 1 else None) or 0
+            client.log_batch(run_id, metrics=[Metric(k, float(v), now(), step) for k, v in args[0].items()])
+        elif op == "log_dict":
+            client.log_dict(run_id, args[0], args[1] if len(args) > 1 else kw["artifact_file"])
+        elif op in ("log_artifact", "log_artifacts"):
+            path = args[0]
+            if not Path(path).exists():
+                print(f"[mlflow] artifact artık yok, atlandı: {path}", flush=True)
+                continue
+            artifact_path = kw.get("artifact_path", args[1] if len(args) > 1 else None)
+            getattr(client, op)(run_id, path, artifact_path=artifact_path)
+    client.set_terminated(run_id)
+    return run_id
 
 
 def backup(cfg: dict) -> None:
