@@ -21,7 +21,7 @@ paper describes:
 
 from __future__ import annotations
 
-STATE = {"epoch_ratio": 0.0}
+STATE = {"epoch_ratio": 0.0, "trainer": None}
 
 
 def _make_loss_class(base_module):
@@ -114,4 +114,21 @@ def patch() -> None:
 
 def epoch_callback(trainer) -> None:
     """``on_train_epoch_start``: training progress for the NWD -> WIoU schedule."""
+    STATE["trainer"] = trainer
     STATE["epoch_ratio"] = trainer.epoch / max(trainer.epochs, 1)
+
+
+def strip_criterion(_validator=None) -> None:
+    """``on_val_end`` (after validation, before the checkpoint is written): drops the loss object
+    from the model and its EMA copy. Ultralytics stores the EMA model in ``last.pt``/``best.pt``;
+    with the swapped-in loss inside, the checkpoint could not be written (the class lives in this
+    run-time patch) and would not load elsewhere. The loss is rebuilt on its next call."""
+    trainer = STATE.get("trainer")
+    if trainer is None:
+        return
+    model = getattr(trainer, "model", None)
+    model = getattr(model, "module", model)  # DataParallel / DDP wrapper
+    ema = getattr(getattr(trainer, "ema", None), "ema", None)
+    for m in (model, ema):
+        if m is not None and getattr(m, "criterion", None) is not None:
+            m.criterion = None

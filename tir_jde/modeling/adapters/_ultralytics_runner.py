@@ -76,6 +76,7 @@ def _train(job: dict) -> dict:
 
         _dist_ssq_loss.patch()
         model.add_callback("on_train_epoch_start", _dist_ssq_loss.epoch_callback)
+        model.add_callback("on_val_end", _dist_ssq_loss.strip_criterion)  # keeps checkpoints standard
     model.train(**job["train_args"])
     save_dir = Path(model.trainer.save_dir)
     return {"save_dir": str(save_dir), "best": str(save_dir / "weights" / "best.pt")}
