@@ -10,6 +10,13 @@ dedektörün** tespitlerini kullanır; yöntemler yalnızca tracker'da ayrışı
 - Ayarlar `configs/setting/common_detector.yaml`. Daha kısa bir deneme gerekirse `common_detector_bsb_pilot`
   (aynı ayarlar, her 2. kare).
 
+## Eğitilmiş model
+
+GitHub release [`detector-v1`](https://github.com/silaylc/TIR-JDE/releases/tag/detector-v1): `best.pt`
+(SHA-256 `9d6a270b5342d6038bafa8abc1fe6ff760cbd2cedf4736049ea5e72f216534a1`), val örnekleri ve tespit videosu.
+Val (16 sekans, 11.868 kare): mAP50 0.896, mAP50-95 0.526, recall 0.813, precision 0.873.
+Pipeline'da `model.detector.init=detector_v1` ile indirilir ve SHA-256 denetlenir.
+
 ## Kod sürümü
 
 Dedektör, SB yazarının YOLOv12 kodunda (Ultralytics 8.3.63 fork'u) **a97bba3** commit'inde (2 Temmuz 2025) çalışır

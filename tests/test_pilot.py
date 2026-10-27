@@ -265,3 +265,16 @@ def test_runner_refuses_weights_saved_by_other_code(tmp_path, mode):
     proc = subprocess.run([sys.executable, str(RUNNER), str(tmp_path / "job.json")], capture_output=True, text=True)
     assert proc.returncode != 0
     assert "uyumsuz" in proc.stderr and "qkv" in proc.stderr
+
+
+def test_trained_common_detector_is_pinned_to_its_release(tmp_path, monkeypatch):
+    import hashlib
+
+    calls = _fake_download(monkeypatch)
+    ov = [f"paths.baselines_dir={tmp_path}", f"paths.work_dir={tmp_path}", "model.detector.init=detector_v1",
+          f"model.detector.pretrained.detector_v1.sha256={hashlib.sha256(b'pt').hexdigest()}"]
+    adapter = get_adapter(load_config("common_detector_bsb", ov), {"root": str(tmp_path / "d")})
+    adapter.detector_job()
+    assert calls == ["https://github.com/silaylc/TIR-JDE/releases/download/detector-v1/best.pt"]
+    real = load_config("common_detector_bsb", [])["model"]["detector"]["pretrained"]["detector_v1"]["sha256"]
+    assert real == "9d6a270b5342d6038bafa8abc1fe6ff760cbd2cedf4736049ea5e72f216534a1"

@@ -18,6 +18,11 @@ model:
         url: https://raw.githubusercontent.com/wish44165/YOLOv12-BoT-SORT-ReID/a97bba3252814543a48286b74ef182e731f38221/BoT-SORT/yolov12/weights/SOT_yolov12l.pt
         sha256: e1b99a2a74ee20b6cd76c85b1e507f658ab1900a3d328739a4ac0849726ea61e
         arch: yolov12l
+      detector_v1:                # bu projede eğitilen ortak dedektör (GitHub release detector-v1):
+                                  # SOT ağırlığından BSB'de 10 epoch, Dist ayarları + NWD/SSQ (docs/pilot.md)
+        url: https://github.com/silaylc/TIR-JDE/releases/download/detector-v1/best.pt
+        sha256: 9d6a270b5342d6038bafa8abc1fe6ff760cbd2cedf4736049ea5e72f216534a1
+        arch: yolov12l
     epochs: 30
     batch: 16
     imgsz: 640
