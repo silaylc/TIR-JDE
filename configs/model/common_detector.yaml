@@ -1,9 +1,4 @@
-# Ortak dedektör: Strong Baseline yazarının YOLOv12 kodu, SB'nin SOT ağırlığıyla uyumlu son sürümde.
-# Yazar 3 Temmuz 2025'te (commit 255f987) repodaki YOLOv12 kodunu turbo sürümüne geçirdi: dikkat katmanı
-# qkv + 7x7 konum katmanı -> qk + v + 5x5, L/X için MLP oranı 1.2 -> 1.5. SOT_yolov12l.pt ve MOT_yolov12n.pt eski
-# sürümle kaydedildiği için yeni kodda yüklenemez (değerlendirme çöker, eğitimde dikkat katmanları sessizce
-# rastgele başlar). Bu yüzden dedektör, ağırlıklarla aynı koddaki son commit'te (a97bba3, 2 Temmuz 2025) çalışır.
-# Strong Baseline'ın tracker'ı ve ReID'i kendi sabit kopyasında (configs/model/strong_baseline.yaml) kalır.
+
 model:
   name: common_detector
   adapter: strong_baseline        # aynı çağrılar: BoT-SORT/yolov12 içindeki fork, YOLO(...).train(...)
