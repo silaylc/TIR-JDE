@@ -108,7 +108,7 @@ one matters for the thesis: appearance carries identity (78 % top-1 among ~21
 candidates, chance 5 %) but, with a fixed weight, it adds noise to a strong
 motion model — the case for a **per-detection** weight and joint training.
 
-Details, tables and figures: [`docs/experiments.md`](docs/experiments.md) (Turkish).
+Details, tables and figures: [`docs/experiments.md`](docs/experiments.md).
 
 ---
 
