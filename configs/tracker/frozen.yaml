@@ -1,0 +1,16 @@
+# Frozen tracker (E2), used for every later experiment and for the final test.
+# Strong Baseline's BoT-SORT on dumped detections, patched by tir_jde/trackers/sb/runner.py.
+tracker:
+  base: strong_baseline_botsort       # wish44165/YOLOv12-BoT-SORT-ReID @ a97bba3, tracker/mc_bot_sort.py
+  cmc: sparseOptFlow                  # camera motion compensation (E2: without it HOTA 0.519)
+  cost_mode: nwd                      # NWD instead of IoU for tiny boxes (E1: HOTA +0.067)
+  nwd_C: 15.0
+  match_thresh: 0.8
+  coast_k: 10                         # write lost tracks at their Kalman prediction for up to 10 frames (E1c)
+  conf_thres: 0.09                    # detections entering the tracker (Strong Baseline value)
+  track_high_thresh: 0.3
+  track_low_thresh: 0.05
+  new_track_thresh: 0.4
+  track_buffer: 60
+  with_reid: false                    # E7a: the head-only embedding did not improve HOTA
+  # not adopted: Kalman Q/R scaling (exp. 4b), Mahalanobis gate (E5a), appearance fusion (E7a)
