@@ -12,10 +12,10 @@ estimate from the same network both conditions the detection features and
 sets the appearance-versus-motion weight **per detection** during
 association.
 
-> **Status:** the experiment pipeline (preprocess → train → evaluate →
-> visualize, logged to MLflow/DagsHub) is in place and runs both baselines on
-> BSB; the TIR-JDE model itself is not implemented yet. See
-> [Experiment pipeline](#experiment-pipeline).
+> **Status (November 2026):** common detector trained, P2 head added, tracker
+> tuned and frozen; validation HOTA 0.511 → **0.660**, identity switches −86 %.
+> Next: joint detection + identity training and the per-detection weight `r`.
+> See [Progress](#progress) and the [experiment log](docs/experiments.md).
 
 ---
 
@@ -48,8 +48,10 @@ correctly.
 
 ## Approach
 
-1. **Lightweight detector.** Ultralytics YOLO (Nano/Small), with a P2
-   (stride-4) head and 1280 px input for tiny targets.
+1. **Small-target detector.** YOLOv12-L fine-tuned on BSB from Strong
+   Baseline's SOT weights, with an added P2 (stride-4) output for tiny
+   targets (adopted in D2). A lighter backbone is evaluated after the method
+   is fixed.
 2. **Degradation conditioning.** A code derived from the degradation estimate
    modulates detector features via [FiLM](https://arxiv.org/abs/1709.07871)
    (`γ(z) ⊙ F + β(z)`).
@@ -70,6 +72,41 @@ detection; none carries the degradation estimate into association.
 
 ---
 
+## Progress
+
+All numbers on the validation group (16 sequences, 11,868 frames), one seed,
+same TrackEval code and Track 3 protocol. Every change was accepted or
+rejected by a decision rule written down **before** its results were seen.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/progress_dark.png">
+  <img alt="HOTA 0.511 → 0.618 → 0.660 and identity switches 2,379 → 461 → 344" src="docs/figures/progress_light.png">
+</picture>
+
+```mermaid
+flowchart LR
+    F[Thermal frame] --> D["detector-v1-P2<br/>YOLOv12-L + stride-4 head"]
+    D -->|boxes, score > 0.09| T["BoT-SORT (Strong Baseline)<br/>NWD cost · coasting K=10 · sparseOptFlow CMC"]
+    T --> O[Tracks]
+```
+
+| Step | What changed | HOTA | MOTA_seq | IDSW |
+|---|---|---|---|---|
+| Start | Strong Baseline's tracker on our common detector | 0.511 | 0.629 | 2,379 |
+| Tracker | NWD cost, coasting (K = 10), camera-motion compensation | 0.618 | 0.688 | 461 |
+| Detector | P2 (stride-4) output: < 8 px recall 0.78 → 0.93 | **0.660** | **0.719** | **344** |
+
+Tried and **not** adopted, each with a recorded reason: SAHI tiling, NWD box
+loss, Kalman noise scaling, centre-distance NMS, a Mahalanobis gate for long
+gaps, and adding a head-only appearance embedding with a fixed weight. The last
+one matters for the thesis: appearance carries identity (78 % top-1 among ~21
+candidates, chance 5 %) but, with a fixed weight, it adds noise to a strong
+motion model — the case for a **per-detection** weight and joint training.
+
+Details, tables and figures: [`docs/experiments.md`](docs/experiments.md) (Turkish).
+
+---
+
 ## Method provenance
 
 Where each component comes from, what we changed, and where it sits in the
@@ -77,13 +114,13 @@ code. Detailed notes on each paper are in Confluence.
 
 | Component | Source | Our change | Code |
 |---|---|---|---|
-| Detector backbone | [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics); [YOLO11-JDE](https://arxiv.org/abs/2501.13710) (architectural template) | P2 head, 1280 px, added FiLM module | `tir_jde/detector/` |
+| Detector backbone | [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics); [YOLO11-JDE](https://arxiv.org/abs/2501.13710) (architectural template); YOLOv12-L of [Strong Baseline](https://arxiv.org/abs/2503.17237) as the common detector | P2 head (adopted, D2), FiLM module (planned) | `tir_jde/detector/` |
 | Appearance head design | [JDE](https://arxiv.org/abs/1909.12605) (joint-head idea), [FairMOT](https://arxiv.org/abs/2004.01888) (anchor-free, high resolution, short vector), [YOLO11-JDE](https://arxiv.org/abs/2501.13710) (2×3×3 + 1×1 conv.) | Head at the P2 level; automatic three-task loss balancing (detection + identity + degradation) | `tir_jde/detector/heads/` |
 | Identity supervision | [YOLO11-JDE](https://arxiv.org/abs/2501.13710) (label-free triplets via Mosaic), [FairMOT](https://arxiv.org/abs/2004.01888) (label-free pre-training) | Positive pairs from different frames using real IDs; pre-training on Track 1/2 SOT data treating each sequence as one identity | `tir_jde/detector/losses/` |
 | Multi-point readout | [Motion-Guided Multi-Offset ReID Readout](https://doi.org/10.3390/rs18183238) | A single center point is fragile in a 6-pixel box; sample from several points instead | `tir_jde/detector/heads/` |
 | Degradation conditioning | [FiLM](https://arxiv.org/abs/1709.07871) (mechanism), [DASR](https://arxiv.org/abs/2104.00416) / [AirNet](https://openaccess.thecvf.com/content/CVPR2022/html/Li_All-in-One_Image_Restoration_for_Unknown_Corruption_CVPR_2022_paper.html) (contrastive degradation encoder), [DAISOD](https://arxiv.org/abs/2608.09311) (explicit degradation estimation in IR) | TIR-specific synthetic degradation (column noise, AGC contrast compression, blur, attenuation); the synthetic parameters are free labels | `tir_jde/degradation/` |
 | Tracking framework | [ByteTrack](https://arxiv.org/abs/2110.06864) (two-round matching), [BoT-SORT](https://arxiv.org/abs/2206.14651) (w/h Kalman, two-gate fusion) | Thresholds retuned for UAVs; TFPS and one-frame predictive coasting from [Edge-Aware](https://arxiv.org/abs/2607.12544) | `tir_jde/trackers/` |
-| Association cost | [BoT-SORT](https://arxiv.org/abs/2206.14651)'s fixed gates, [ByteTrack](https://arxiv.org/abs/2110.06864)'s score rule, [Dist-Tracker](https://openaccess.thecvf.com/content/CVPR2025W/Anti-UAV/html/Wang_Dist-Tracker_A_Small_Object-aware_Detector_and_Tracker_for_UAV_Tracking_CVPRW_2025_paper.html)'s L2 + IoU fusion | A continuous, per-detection `r` instead of fixed gates; center distance or [NWD](https://arxiv.org/abs/2110.13389) trialled in place of IoU for tiny boxes | `tir_jde/trackers/*/matching.py` |
+| Association cost | [BoT-SORT](https://arxiv.org/abs/2206.14651)'s fixed gates, [ByteTrack](https://arxiv.org/abs/2110.06864)'s score rule, [Dist-Tracker](https://openaccess.thecvf.com/content/CVPR2025W/Anti-UAV/html/Wang_Dist-Tracker_A_Small_Object-aware_Detector_and_Tracker_for_UAV_Tracking_CVPRW_2025_paper.html)'s L2 + IoU fusion | A continuous, per-detection `r` instead of fixed gates; [NWD](https://arxiv.org/abs/2110.13389) in place of IoU for tiny boxes (adopted, E1) | `tir_jde/trackers/sb/` |
 | Appearance memory | [JDE](https://arxiv.org/abs/1909.12605) (EMA update) | Update rate is not fixed but tied to `r` — appearance from a degraded frame changes the memory less | `tir_jde/trackers/*/track.py` |
 | Camera motion (GMC) | [BoT-SORT](https://arxiv.org/abs/2206.14651) (pyramidal Lucas-Kanade + RANSAC) | Outside the core contribution; to be measured and decided by an on/off ablation (in some sequences the camera is completely static) | `tir_jde/trackers/*/gmc.py` |
 | Main baseline | [Strong Baseline](https://arxiv.org/abs/2503.17237) ([code](https://github.com/wish44165/YOLOv12-BoT-SORT-ReID)) | Retrained on the BSB training split; joint embedding compared against a separately trained ReID | `baselines/strong_baseline/` |
@@ -223,9 +260,9 @@ data/
 ├── processed/    final, analysis-ready data
 └── splits/       BSB sequence lists (committed; the data files above are not)
 
-docs/             mkdocs project (`mkdocs serve` from `docs/`)
+docs/             experiments.md (experiment log), figures/, mkdocs project
 models/           trained, serialized models
-notebooks/        EDA and analysis
+notebooks/        EDA, analysis; experiments/ (Colab experiment notebooks, outputs cleared)
 references/       notes on cited papers, data dictionaries
 reports/
 └── figures/      generated graphics for reports
@@ -242,14 +279,17 @@ tir_jde/          the installable package — all code lives here
 │   ├── train.py         training entry point
 │   ├── predict.py        inference entry point
 │   └── adapters/         one adapter per compared model (Strong Baseline, Dist-Tracker)
-├── detector/            detector, appearance head, losses
+├── detector/            detector, appearance head, losses; p2.py (P2 head), postprocess.py
 ├── degradation/         degradation estimation and the FiLM module
-├── trackers/            tracking framework and association
-├── eval/                TrackEval wrapper, ablations, stratified reporting
+├── trackers/
+│   └── sb/              Strong Baseline's BoT-SORT + our patches (NWD, coasting, gate, fusion)
+├── reid/                identity probe on frozen detector features (E3)
+├── eval/                TrackEval wrapper, paired bootstrap + Holm (stats.py), error analyses
 └── tools/               data preparation, format conversion, visualization
 
 baselines/        notes on the comparison methods (their code is not copied into Git)
-configs/          base / data / model / experiment configurations
+configs/          base / data / model / experiment configurations;
+                  arch/ (YOLOv12-L-P2), tracker/ (frozen tracker settings)
 tests/            unit/smoke tests, mirroring the package layout
 Makefile          create_environment / requirements / lint / format / test / data
 environment.yml   conda environment (single source of dependencies)
