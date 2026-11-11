@@ -1,0 +1,44 @@
+# detector-v1-P2 (D2): YOLOv12-L with an extra stride-4 (P2) output.
+# Layers 0-20 are identical to yolov12.yaml (scale l) of the common detector's fork
+# (wish44165/YOLOv12-BoT-SORT-ReID @ a97bba3). Added: 21-23; Detect moved to 24 and reads P2-P5.
+# Built from detector-v1 weights by tir_jde/detector/p2.py (weights are copied, not re-initialised).
+
+nc: 1
+scale: l
+scales:
+  l: [1.00, 1.00, 512]
+
+backbone:
+  - [-1, 1, Conv,  [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv,  [128, 3, 2]] # 1-P2/4
+  - [-1, 2, C3k2,  [256, False, 0.25]] # 2
+  - [-1, 1, Conv,  [256, 3, 2]] # 3-P3/8
+  - [-1, 2, C3k2,  [512, False, 0.25]]
+  - [-1, 1, Conv,  [512, 3, 2]] # 5-P4/16
+  - [-1, 4, A2C2f, [512, True, 4]]
+  - [-1, 1, Conv,  [1024, 3, 2]] # 7-P5/32
+  - [-1, 4, A2C2f, [1024, True, 1]] # 8
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 6], 1, Concat, [1]] # cat backbone P4
+  - [-1, 2, A2C2f, [512, False, -1]] # 11
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 4], 1, Concat, [1]] # cat backbone P3
+  - [-1, 2, A2C2f, [256, False, -1]] # 14 (P3/8)
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 11], 1, Concat, [1]] # cat head P4
+  - [-1, 2, A2C2f, [512, False, -1]] # 17 (P4/16)
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 8], 1, Concat, [1]] # cat head P5
+  - [-1, 2, C3k2, [1024, True]] # 20 (P5/32)
+
+  # --- P2 branch (new) ---
+  - [14, 1, nn.Upsample, [None, 2, "nearest"]] # 21: from P3 to stride 4
+  - [[-1, 2], 1, Concat, [1]] # 22: cat backbone P2/4
+  - [-1, 2, A2C2f, [256, False, -1]] # 23 (P2/4)
+
+  - [[23, 14, 17, 20], 1, Detect, [nc]] # 24: Detect(P2, P3, P4, P5)
