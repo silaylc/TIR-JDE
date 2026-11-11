@@ -1,5 +1,7 @@
 # Notebooks
 
-Keşif ve görselleştirme için Jupyter defterleri.
+Colab notebooks for exploration and experiments. They are being cleaned up and will be added here.
 
-Defterler deneme ve inceleme içindir. Tekrar kullanılacak kod tir_jde/tools/ veya tir_jde/trackers/ altına taşınır.
+- `experiments/`: one notebook per experiment group (outputs cleared).
+
+Reusable code does not live in notebooks; it is moved into the package (`tir_jde/`).

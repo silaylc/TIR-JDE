@@ -232,7 +232,6 @@ python -m tir_jde.pipeline compare    strong_baseline_bsb dist_tracker_bsb --see
   any key can be overridden on the command line (`model.detector.epochs=1`).
 - Baselines run unmodified, from their own repositories pinned to a commit,
   in their own Python environments (`tir_jde/modeling/adapters/`).
-- Colab (A100): [`notebooks/colab_pipeline.ipynb`](notebooks/colab_pipeline.ipynb).
 - Full description (Turkish): [`docs/pipeline.md`](docs/pipeline.md).
 
 ## Setup
@@ -267,7 +266,7 @@ data/
 
 docs/             experiments.md (experiment log), figures/, mkdocs project
 models/           trained, serialized models
-notebooks/        EDA, analysis; experiments/ (Colab experiment notebooks, outputs cleared)
+notebooks/        Colab notebooks (to be added after clean-up)
 references/       notes on cited papers, data dictionaries
 reports/
 └── figures/      generated graphics for reports

@@ -26,5 +26,5 @@ dependencies:
     - mkdocs
     # TrackEval (HOTA, IDF1, MOTA): değerlendirme aşamasında
     - git+https://github.com/JonathonLuiten/TrackEval.git
-    # Baseline'lar kendi ortamlarında çalışır (bkz. notebooks/colab_pipeline.ipynb)
+    # Baseline'lar kendi ortamlarında çalışır (bkz. docs/pipeline.md)
     - -e .

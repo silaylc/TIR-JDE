@@ -29,7 +29,6 @@ python -m tir_jde.pipeline train-detector common_detector_bsb_pilot seed=0 tag=R
 python -m tir_jde.pipeline pilot-report   common_detector_bsb_pilot
 ```
 
-Colab'da baştan sona: [`notebooks/colab_pipeline.ipynb`](../notebooks/colab_pipeline.ipynb).
 Ortak dedektör, pilotu ve karar kuralı: [`pilot.md`](pilot.md).
 
 ## Adımlar
