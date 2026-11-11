@@ -32,6 +32,14 @@ PACKAGES = [
     "tir_jde.pipeline",
     "tir_jde.eval.trackeval_runner",
     "tir_jde.modeling.adapters",
+    "tir_jde.eval.stats",
+    "tir_jde.eval.boxes",
+    "tir_jde.eval.analysis",
+    "tir_jde.detector.p2",
+    "tir_jde.detector.postprocess",
+    "tir_jde.trackers.sb",
+    "tir_jde.reid",
+    "tir_jde.reid.queries",
 ]
 
 
