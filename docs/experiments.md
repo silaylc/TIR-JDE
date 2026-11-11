@@ -60,7 +60,13 @@ Ortak detector (detector-v1): Strong Baseline'ın SOT ağırlığından BSB üze
 
 Birincil karar: DetA farkı +0,083, CI95 (0,035; 0,132).
 
+Örnekler (< 8 px hedefler; dört durumun her birinden rastgele, tohum 0: P2 bulur/kontrol kaçırır, tersi, ikisi de bulur, ikisi de kaçırır). "Kontrol bulur, P2 kaçırır" örneklerinin ikisi de BB2_03'ten; bu sekansta GT kutularının hedefin biraz solunda durduğu şüphesi var (kontrol edilecek).
+
+![D2 örnekleri](figures/d2_small_target_examples_all.png)
+
 **D2b, merkez NMS.** P2 aynı hedefe birbirine çok yakın birkaç kutu çiziyor (yinelenen çift oranı ‰151, kontrolde ‰51). Merkezleri 3 px'ten yakın kutuları silen bir NMS bunları tamamen temizledi ve IDSW'yi %12 azalttı, ama HOTA değişmedi (+0,002, CI sıfırı kapsıyor) ve küçük hedef recall'ı 0,009 düştü. Sonuç: yinelenen kutular takip hatasının yalnızca ~%1–2'si; **darboğaz FP ve FN**. Kod kaldı ama kapalı: [`tir_jde/detector/postprocess.py`](../tir_jde/detector/postprocess.py).
+
+<img alt="D2b: merkez NMS ile silinen kutular" src="figures/d2b_center_nms_examples.png" width="420">
 
 ## Kimlik (E1b, E5a, E3, E7a)
 
@@ -73,6 +79,10 @@ Birincil karar: DetA farkı +0,083, CI95 (0,035; 0,132).
 ![E3](figures/e3_identity_probe.png)
 
 Görünüş, 4–8 piksellik termal hedeflerde bile şansın ~16 katı doğru, ama tek başına konumdan zayıf. Konumun yanıldığı sorguların %53'ünde ise görünüş doğru: iki kaynak birbirini tamamlıyor.
+
+Örnekler ([G] görünüşün, [K] konumun seçtiği aday; yeşil çerçeve doğru kimlik). Görünüş yanıldığında, seçtiği aday ile doğru aday arasındaki benzerlik farkı çok küçük (ör. 0,75'e karşı 0,72): güvenilirlik tespit başına değişiyor. Son satırdaki büyük hedef 32×32 kırpıntıya sığmıyor; o satır bilgilendirici değil.
+
+![E3 örnekleri](figures/e3_identity_examples.png)
 
 **E7a, sabit ağırlıklı birleşim.** Aynı başlık tracker'a eklendi: BoT-SORT'un `min(konum, görünüş)` kuralı ve `(1 − w) · konum + w · görünüş`.
 

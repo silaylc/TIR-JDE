@@ -96,6 +96,11 @@ flowchart LR
 | Tracker | NWD cost, coasting (K = 10), camera-motion compensation | 0.618 | 0.688 | 461 |
 | Detector | P2 (stride-4) output: < 8 px recall 0.78 → 0.93 | **0.660** | **0.719** | **344** |
 
+<img alt="A < 8 px drone missed without the P2 head and found with it" src="docs/figures/d2_small_target_example.png">
+
+*One example of what the P2 head changes. The full sample — random draws from all four outcomes,
+including cases where P2 misses — is in the [experiment log](docs/experiments.md#detector-d0-d1-d2-d2b).*
+
 Tried and **not** adopted, each with a recorded reason: SAHI tiling, NWD box
 loss, Kalman noise scaling, centre-distance NMS, a Mahalanobis gate for long
 gaps, and adding a head-only appearance embedding with a fixed weight. The last
